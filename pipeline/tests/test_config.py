@@ -30,6 +30,15 @@ class TestLoadConfig:
         cfg = load_config()
         assert cfg.gas_admin_token == "tok123"
 
+    def test_env_overrides_for_cloud(self, tmp_path, monkeypatch):
+        # GitHub Actionsではconfig.yamlを持たず環境変数で設定を渡す
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("YTSHORTS_GAS_WEBAPP_URL", "https://script.google.com/macros/s/x/exec")
+        monkeypatch.setenv("YTSHORTS_WHISPER_MODEL", "medium")
+        cfg = load_config()
+        assert cfg.gas_webapp_url == "https://script.google.com/macros/s/x/exec"
+        assert cfg.whisper_model == "medium"
+
     def test_paths(self):
         cfg = load_config("/nonexistent/config.yaml")
         assert cfg.inbox == cfg.workspace / "inbox"

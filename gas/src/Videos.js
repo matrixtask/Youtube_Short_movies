@@ -55,10 +55,12 @@ function handleVideoUpload(event) {
       shot_at: fmtDateTime(nowJst()),
     });
   }
+  var dispatched = triggerGithub('video-uploaded');
   sendSlack(
     ':inbox_tray: 動画を' + added + '本受け取りました。編集キューに入れました。' +
     (script ? '\n台本: ' + script.script_id : '') +
-    '\n編集が終わったらこのスレッドに結果を返します。',
+    (dispatched ? '\nクラウドで編集を開始します。終わったらこのスレッドにショートを返します。'
+                : '\n編集が終わったらこのスレッドに結果を返します。'),
     threadTs
   );
   logEvent('video_received', added + '本 script=' + (script ? script.script_id : 'なし'));
@@ -92,6 +94,7 @@ function listPendingVideos() {
       return {
         video_id: String(r.video_id),
         script_id: scriptId,
+        thread_ts: rawSlackTs(r.thread_ts),
         file_id: String(r.file_id),
         file_name: String(r.file_name),
         url_private: String(r.url_private),
@@ -134,4 +137,39 @@ function markVideoDone(videoId, ok, summary) {
   notifySlack(prefix + String(summary || '(詳細なし)'), rawSlackTs(video.thread_ts) || undefined);
   logEvent('video_' + (ok ? 'done' : 'failed'), videoId + ': ' + String(summary || '').slice(0, 300));
   return true;
+}
+
+/** 生成済みショートを台帳に登録する（パイプラインから呼ばれる） */
+function registerShort(payload) {
+  appendRowObj(SHEET.SHORTS, {
+    short_id: newId('sh'),
+    created_at: fmtDateTime(nowJst()),
+    video_id: String(payload.video_id || ''),
+    script_id: String(payload.script_id || ''),
+    title: String(payload.title || ''),
+    score: String(payload.score || ''),
+    duration: String(payload.duration || ''),
+    slack_file_id: String(payload.slack_file_id || ''),
+    url_private: String(payload.url_private || ''),
+    status: 'stock',
+  });
+  return true;
+}
+
+/** ショートの台帳を返す（まとめ動画の材料。実体はSlackからダウンロードする） */
+function listShorts() {
+  return readTable(SHEET.SHORTS).map(function (r) {
+    return {
+      short_id: String(r.short_id),
+      created_at: String(r.created_at),
+      video_id: String(r.video_id || ''),
+      script_id: String(r.script_id || ''),
+      title: String(r.title),
+      score: Number(r.score) || 0,
+      duration: Number(r.duration) || 0,
+      slack_file_id: String(r.slack_file_id || ''),
+      url_private: String(r.url_private || ''),
+      status: String(r.status || 'stock'),
+    };
+  });
 }

@@ -178,6 +178,14 @@ function handleChannelMessage(text) {
     startExtraShootScript();
     return true;
   }
+  // 「まとめて」でクラウド上のまとめ動画生成を起動する
+  if (/^(まとめ|まとめて|compile)$/i.test(trimmed)) {
+    var ok = triggerGithub('compile-requested');
+    sendSlack(ok
+      ? ':clapper: まとめ動画の作成を開始しました。できあがったらこのチャンネルに届きます。'
+      : ':warning: GITHUB_REPO / GITHUB_TOKEN が未設定です。GitHubのActionsタブから compile を手動実行してください。');
+    return true;
+  }
   var open = readTable(SHEET.SCRIPTS).filter(function (r) {
     return String(r.status) === SCRIPT_STATUS.OPEN && r.thread_ts;
   });

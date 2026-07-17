@@ -1,4 +1,4 @@
-# pipeline/ — 編集パイプライン（ローカル実行）
+# pipeline/ — 編集パイプライン
 
 撮りっぱなしの動画を入れると、ここまで全部自動でやります:
 
@@ -11,9 +11,31 @@
 5. **レンダリング** — ffmpegで9:16・字幕焼き込みのショートを量産
 6. **まとめ動画** — 溜まったショートをぼかし背景の16:9に繋いで1本に
 
-## セットアップ
+## クラウド実行（推奨・PC不要）
 
-必要なもの: Python 3.10+ / ffmpeg / Claude APIキー
+このリポジトリのGitHub Actions（`.github/workflows/`）がパイプラインを
+クラウドで実行します。やることはリポジトリの
+Settings > Secrets and variables > Actions に4つのSecretsを入れるだけ:
+
+| Secret | 内容 |
+|---|---|
+| `ANTHROPIC_API_KEY` | Claude APIキー |
+| `GAS_WEBAPP_URL` | GASのWebアプリURL |
+| `GAS_ADMIN_TOKEN` | GASの `ADMIN_TOKEN` と同じ値 |
+| `SLACK_BOT_TOKEN` | Slackボットトークン（files:read / files:write / chat:write） |
+
+- **process-videos** — Slackに動画が届くとGASが即起動（`GITHUB_REPO`/`GITHUB_TOKEN`
+  設定時）。保険として毎時も実行。生成したショートは元のスレッドに返り、
+  台帳（Shortsシート）に登録される
+- **compile** — Slackで「まとめて」と書くと起動（Actionsタブから手動でも可）。
+  Slack上のショートを集めて1本にまとめ、チャプター付きでSlackに投稿
+
+ランナーはCPUなので文字起こしは `medium` モデルを使います（ワークフローの
+`YTSHORTS_WHISPER_MODEL` で変更可）。10分の動画で20分前後が目安です。
+
+## ローカル実行（クラウドを使わない場合）
+
+必要なもの: Python 3.10+ / ffmpeg / 日本語フォント（例: Noto Sans CJK）/ Claude APIキー
 
 ```bash
 cd pipeline
@@ -22,31 +44,17 @@ export ANTHROPIC_API_KEY=sk-ant-...
 ytshorts init             # workspace/ と config.yaml を作る
 ```
 
-GAS撮影台本システムと連携する場合（Slackに投げるだけの完全自動化。推奨）:
+GAS連携（Slackから取り込む場合）:
 
 ```bash
-export GAS_ADMIN_TOKEN=...    # gas/ のADMIN_TOKENと同じ値
-export SLACK_BOT_TOKEN=xoxb-... # 動画ダウンロード用（files:read 権限）
+export GAS_ADMIN_TOKEN=...      # gas/ のADMIN_TOKENと同じ値
+export SLACK_BOT_TOKEN=xoxb-... # 動画DL・ショートUP用
 # config.yaml の gas_webapp_url にGASのWebアプリURLを設定
 ```
-
-## 使い方
-
-### Slack完結モード（推奨）
-
-スマホで撮った動画をSlackの台本スレッドに投稿するだけ。PC側は常駐の
-`pull` が新着を検知して、ダウンロード→編集→結果をスレッドに返します。
 
 ```bash
 ytshorts pull                     # 新着を1回だけ取り込んで処理
 ytshorts pull --watch             # 常駐（5分間隔で監視、Ctrl+Cで終了）
-ytshorts pull --watch --interval 60
-```
-
-cronで回す場合（常駐の代わり）:
-
-```cron
-*/10 * * * * cd ~/Youtube_Shrot_movies/pipeline && ANTHROPIC_API_KEY=... GAS_ADMIN_TOKEN=... SLACK_BOT_TOKEN=... ytshorts pull >> pull.log 2>&1
 ```
 
 ### 手動モード（GASなしでも動く）
@@ -61,8 +69,9 @@ ytshorts run --force              # 文字起こし・プランを作り直す
 ### ストックとまとめ動画
 
 ```bash
-ytshorts list                     # ストック一覧（スコア・秒数）
-ytshorts compile                  # 全部を1本のまとめ動画に
+ytshorts list                     # ローカルストック一覧（スコア・秒数）
+ytshorts compile                  # ローカルのショートを1本のまとめ動画に
+ytshorts compile --from-slack     # Slack上のショートを材料に（クラウドと同じ動き）
 ytshorts compile --min-score 80 --limit 10
 ```
 

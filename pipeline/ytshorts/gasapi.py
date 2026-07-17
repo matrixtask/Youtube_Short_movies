@@ -30,13 +30,15 @@ def fetch_latest_script(cfg: Config) -> dict | None:
     return (shot or scripts)[-1]
 
 
-def fetch_pending_videos(cfg: Config) -> list[dict]:
-    """Slackに投げられて処理待ちの動画一覧を取得する。未設定・失敗時は空リスト。
+def fetch_pending_videos(cfg: Config) -> dict:
+    """Slackに投げられて処理待ちの動画一覧を取得する。
 
-    各要素: {video_id, script_id, file_id, file_name, url_private, size, questions}
+    戻り値: {"channel": 通知先チャンネルID, "videos": [...]}
+    各動画: {video_id, script_id, thread_ts, file_id, file_name, url_private, size, questions}
     """
+    empty = {"channel": "", "videos": []}
     if not cfg.gas_webapp_url or not cfg.gas_admin_token:
-        return []
+        return empty
     url = (
         cfg.gas_webapp_url
         + "?" + urllib.parse.urlencode({"token": cfg.gas_admin_token, "action": "videos"})
@@ -45,10 +47,44 @@ def fetch_pending_videos(cfg: Config) -> list[dict]:
         with urllib.request.urlopen(url, timeout=30) as res:
             data = json.loads(res.read().decode("utf-8"))
     except Exception:
-        return []
+        return empty
     if not data.get("ok"):
-        return []
-    return data.get("videos") or []
+        return empty
+    return {"channel": data.get("channel", ""), "videos": data.get("videos") or []}
+
+
+def fetch_shorts(cfg: Config) -> dict:
+    """ショート台帳を取得する。{"channel": "...", "shorts": [...]}"""
+    empty = {"channel": "", "shorts": []}
+    if not cfg.gas_webapp_url or not cfg.gas_admin_token:
+        return empty
+    url = (
+        cfg.gas_webapp_url
+        + "?" + urllib.parse.urlencode({"token": cfg.gas_admin_token, "action": "shorts"})
+    )
+    try:
+        with urllib.request.urlopen(url, timeout=30) as res:
+            data = json.loads(res.read().decode("utf-8"))
+    except Exception:
+        return empty
+    if not data.get("ok"):
+        return empty
+    return {"channel": data.get("channel", ""), "shorts": data.get("shorts") or []}
+
+
+def register_short(cfg: Config, meta: dict) -> bool:
+    """生成したショートをGASの台帳（Shortsシート）に登録する。"""
+    if not cfg.gas_webapp_url or not cfg.gas_admin_token:
+        return False
+    payload = json.dumps(dict(meta, action="short_created", token=cfg.gas_admin_token)).encode("utf-8")
+    req = urllib.request.Request(
+        cfg.gas_webapp_url, data=payload, headers={"content-type": "application/json"}
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as res:
+            return json.loads(res.read().decode("utf-8")).get("ok", False)
+    except Exception:
+        return False
 
 
 def mark_video_done(cfg: Config, video_id: str, ok: bool, summary: str) -> bool:

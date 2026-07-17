@@ -69,4 +69,9 @@ def load_config(path: str | Path | None = None) -> Config:
         cfg.workspace = Path(os.environ["YTSHORTS_WORKSPACE"])
     if os.environ.get("GAS_ADMIN_TOKEN"):
         cfg.gas_admin_token = os.environ["GAS_ADMIN_TOKEN"]
+    # クラウド実行（GitHub Actions）ではconfig.yamlを持たないため環境変数で渡す
+    if os.environ.get("YTSHORTS_GAS_WEBAPP_URL"):
+        cfg.gas_webapp_url = os.environ["YTSHORTS_GAS_WEBAPP_URL"]
+    if os.environ.get("YTSHORTS_WHISPER_MODEL"):
+        cfg.whisper_model = os.environ["YTSHORTS_WHISPER_MODEL"]
     return cfg

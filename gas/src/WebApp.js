@@ -20,8 +20,20 @@ function doGet(e) {
 
   // 処理待ちの動画を返す（`ytshorts pull` が取得してダウンロード・編集する）
   if (p.action === 'videos') {
-    return ContentService.createTextOutput(JSON.stringify({ ok: true, videos: listPendingVideos() }))
-      .setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify({
+      ok: true,
+      channel: String(getProp('SLACK_CHANNEL_ID') || ''),
+      videos: listPendingVideos(),
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // 生成済みショートの台帳を返す（まとめ動画の材料）
+  if (p.action === 'shorts') {
+    return ContentService.createTextOutput(JSON.stringify({
+      ok: true,
+      channel: String(getProp('SLACK_CHANNEL_ID') || ''),
+      shorts: listShorts(),
+    })).setMimeType(ContentService.MimeType.JSON);
   }
 
   // 最近の台本と質問を返す（パイプラインが編集プランの文脈に使う）
@@ -71,6 +83,17 @@ function doPost(e) {
   // SlackのURL検証
   if (payload.type === 'url_verification') {
     return ContentService.createTextOutput(payload.challenge);
+  }
+
+  // 生成済みショートの台帳登録
+  // 例: POST {"action":"short_created","token":"...","video_id":"...","title":"...",
+  //           "score":85,"duration":42,"slack_file_id":"F...","url_private":"https://..."}
+  if (payload.action === 'short_created') {
+    if (!payload.token || payload.token !== getProp('ADMIN_TOKEN')) {
+      return ContentService.createTextOutput(JSON.stringify({ ok: false, error: 'unauthorized' }));
+    }
+    registerShort(payload);
+    return ContentService.createTextOutput(JSON.stringify({ ok: true }));
   }
 
   // パイプラインからの動画単位の処理結果（元のスレッドに結果が返る）

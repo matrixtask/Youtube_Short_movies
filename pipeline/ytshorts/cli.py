@@ -17,7 +17,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import compilation, cuts, gasapi, illustrations, planner, pull, render, subtitles
+from . import compilation, cuts, gasapi, illustrations, planner, pull, render, slackup, subtitles
 from .config import CONFIG_FILENAME, Config, load_config
 from .transcribe import all_words, load_or_transcribe
 
@@ -171,9 +171,11 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 def pull_once(cfg: Config) -> int:
     """Slackに投げられた処理待ち動画を取り込んで処理する。処理した本数を返す。"""
-    videos = gasapi.fetch_pending_videos(cfg)
+    pending = gasapi.fetch_pending_videos(cfg)
+    videos = pending["videos"]
     if not videos:
         return 0
+    channel = pending["channel"]
     token = pull.slack_token()
     index = load_index(cfg)
     for v in videos:
@@ -187,9 +189,11 @@ def pull_once(cfg: Config) -> int:
             made = process_video(dest, cfg, script if script["questions"] else None, force=False)
             index.extend(made)
             save_index(cfg, index)
+            shared = share_shorts_to_slack(cfg, token, channel, v, made)
             summary = (
                 f"{v.get('file_name')} から {len(made)}本のショートを生成しました。\n"
                 + "\n".join(f"• {m['title']}（{m['score']}点 / {m['duration']}秒）" for m in made)
+                + ("\nショートをこのスレッドに置いておきます。" if shared else "")
             )
             gasapi.mark_video_done(cfg, v["video_id"], True, summary)
             print(f"✅ {v.get('file_name')}: ショート{len(made)}本")
@@ -197,6 +201,33 @@ def pull_once(cfg: Config) -> int:
             gasapi.mark_video_done(cfg, v["video_id"], False, f"{v.get('file_name')}: {e}")
             print(f"❌ {v.get('file_name')}: {e}", file=sys.stderr)
     return len(videos)
+
+
+def share_shorts_to_slack(cfg: Config, token: str, channel: str, video: dict, made: list[dict]) -> int:
+    """生成したショートをSlackの元スレッドにアップロードし、GASの台帳に登録する。"""
+    if not channel:
+        return 0
+    shared = 0
+    for m in made:
+        fpath = cfg.shorts_dir / m["file"]
+        try:
+            info = slackup.upload_to_slack(
+                token, channel, video.get("thread_ts") or None, fpath,
+                title=f"{m['title']}（{m['score']}点）",
+            )
+            gasapi.register_short(cfg, {
+                "video_id": video.get("video_id", ""),
+                "script_id": video.get("script_id", ""),
+                "title": m["title"],
+                "score": m["score"],
+                "duration": m["duration"],
+                "slack_file_id": info["id"],
+                "url_private": info["url_private"],
+            })
+            shared += 1
+        except Exception as e:
+            print(f"⚠ Slackへのアップロード失敗 ({m['file']}): {e}", file=sys.stderr)
+    return shared
 
 
 def cmd_pull(args: argparse.Namespace) -> int:
@@ -222,13 +253,42 @@ def cmd_pull(args: argparse.Namespace) -> int:
         return 0
 
 
+def collect_slack_shorts(cfg: Config, min_score: int) -> tuple[list[dict], Path, str]:
+    """GASの台帳からショートを集め、Slackからダウンロードして材料にする。"""
+    ledger = gasapi.fetch_shorts(cfg)
+    token = pull.slack_token()
+    cache = cfg.workspace / "cache"
+    cache.mkdir(parents=True, exist_ok=True)
+    entries = []
+    for s in ledger["shorts"]:
+        if s["score"] < min_score or not s["url_private"]:
+            continue
+        fname = f"{s['short_id']}.mp4"
+        dest = cache / fname
+        if not dest.exists():
+            print(f"⬇ {s['title']} をダウンロード中…")
+            pull.download_slack_file(s["url_private"], dest, token)
+        entries.append({
+            "file": fname,
+            "title": s["title"],
+            "score": s["score"],
+            "created_at": s["created_at"],
+        })
+    return entries, cache, ledger["channel"]
+
+
 def cmd_compile(args: argparse.Namespace) -> int:
     cfg = load_config(args.config)
     cfg.ensure_dirs()
-    entries = [e for e in load_index(cfg) if e["score"] >= args.min_score]
-    entries = [e for e in entries if (cfg.shorts_dir / e["file"]).exists()]
+    channel = ""
+    if args.from_slack:
+        entries, src_dir, channel = collect_slack_shorts(cfg, args.min_score)
+    else:
+        entries = [e for e in load_index(cfg) if e["score"] >= args.min_score]
+        entries = [e for e in entries if (cfg.shorts_dir / e["file"]).exists()]
+        src_dir = cfg.shorts_dir
     if not entries:
-        print("まとめられるショートがありません。先に `ytshorts run` でストックしてください。")
+        print("まとめられるショートがありません。先にショートをストックしてください。")
         return 1
     entries.sort(key=lambda e: -e["score"])
     if args.limit:
@@ -238,10 +298,24 @@ def cmd_compile(args: argparse.Namespace) -> int:
     name = args.out or f"compilation_{dt.datetime.now().strftime('%Y%m%d_%H%M')}.mp4"
     out_path = cfg.compilations_dir / name
     print(f"{len(entries)}本のショートを1本にまとめています…")
-    chapters = compilation.compile_shorts(entries, cfg.shorts_dir, out_path)
+    chapters = compilation.compile_shorts(entries, src_dir, out_path)
     print(f"✅ {out_path}")
     print("--- YouTube概要欄用チャプター ---")
     print(chapters)
+
+    if args.from_slack and channel:
+        try:
+            slackup.upload_to_slack(
+                pull.slack_token(), channel, None, out_path,
+                title=f"まとめ動画（{len(entries)}本 / {dt.datetime.now().strftime('%Y-%m-%d')}）",
+            )
+            gasapi.report_result(
+                cfg, None,
+                f"まとめ動画ができました（{len(entries)}本）。\n--- 概要欄用チャプター ---\n{chapters}",
+            )
+            print("Slackにまとめ動画を投稿しました。")
+        except Exception as e:
+            print(f"⚠ Slackへの投稿に失敗: {e}", file=sys.stderr)
     return 0
 
 
@@ -280,6 +354,8 @@ def main(argv: list[str] | None = None) -> int:
     p_comp.add_argument("--min-score", type=int, default=0, help="このスコア以上だけまとめる")
     p_comp.add_argument("--limit", type=int, default=0, help="本数上限（スコア上位から）")
     p_comp.add_argument("--out", help="出力ファイル名")
+    p_comp.add_argument("--from-slack", action="store_true",
+                        help="GASの台帳とSlack上のファイルを材料にし、結果もSlackへ投稿する（クラウド実行用）")
     p_comp.set_defaults(func=cmd_compile)
 
     sub.add_parser("list", help="ストック一覧").set_defaults(func=cmd_list)

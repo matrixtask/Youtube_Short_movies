@@ -26,12 +26,19 @@ GASエディタ > プロジェクトの設定 > スクリプト プロパティ�
 | `SHOOT_QUESTIONS` | 質問数（任意、既定5） |
 | `SHOOT_DAYS` | 撮影日 `MON,WED,FRI` など（任意、空なら毎日） |
 | `SHOOT_HOUR` | 届く時刻（任意、既定8時台） |
+| `GITHUB_REPO` | クラウド実行用 `owner/repo`（任意。設定すると動画到着で即Actions起動） |
+| `GITHUB_TOKEN` | `repository_dispatch` を送れる fine-grained PAT（任意） |
 
 SlackアプリはX_Autopostと同じものを使い回せます（別チャンネルにするだけ）。
-Bot Token Scopes は `chat:write` に加えて **`files:read`**（動画のダウンロードに
-必要）。Event Subscriptions で `message.channels` を購読し、ボットをチャンネルに
-招待。動画アップロードのイベントも `message.channels`（subtype: file_share）で
-届くので追加の購読は不要です。
+Bot Token Scopes は `chat:write` に加えて **`files:read`**（動画のダウンロード）と
+**`files:write`**（生成したショートをスレッドに返すのに必要）。
+Event Subscriptions で `message.channels` を購読し、ボットをチャンネルに招待。
+動画アップロードのイベントも `message.channels`（subtype: file_share）で届くので
+追加の購読は不要です。
+
+`GITHUB_REPO` / `GITHUB_TOKEN` を設定しない場合でも、GitHub Actionsの毎時の
+定期実行（またはローカルの `ytshorts pull`）が処理を拾います。設定すると
+動画が届いた瞬間・「まとめて」と書いた瞬間にクラウド処理が始まります。
 
 ### 3. 初期化
 
@@ -52,14 +59,15 @@ GASエディタから順に実行:
 
 - 朝、Slackに台本が届く → スマホで縦画面のまま1問ずつ答える動画を撮る
 - **撮った動画を台本のスレッドにそのまま投稿** → 編集キューに登録され、
-  台本と自動で紐づく。編集結果も同じスレッドに返ってくる
+  台本と自動で紐づく。**できあがったショートが同じスレッドに返ってくる**
   （チャンネル直下に投稿した場合は最新の台本に紐づきます）
+- チャンネルに **「まとめて」** と書くと、溜まったショートからまとめ動画が作られて届く
 - 「リテイク」→ 台本を作り直す
 - チャンネルに「台本」と書くと追加の台本がいつでももらえる
 - それ以外の返信はメモとして保存され、次の台本生成のヒントになる
 
-動画の実処理はローカルPCの `ytshorts pull --watch`（常駐）が行います。
-セットアップは [../pipeline/README.md](../pipeline/README.md) を参照。
+動画の実処理はGitHub Actions（クラウド）またはローカルPCの
+`ytshorts pull --watch` が行います。[../pipeline/README.md](../pipeline/README.md) を参照。
 
 ## Themesシート
 

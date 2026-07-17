@@ -13,12 +13,15 @@
  *   SHOOT_QUESTIONS     1回の台本の質問数（既定: 5）
  *   SHOOT_DAYS          台本を届ける曜日 "MON,WED,FRI" など（既定: 毎日）
  *   SHOOT_HOUR          台本を届ける時刻（既定: 8）
+ *   GITHUB_REPO         クラウド実行用 "owner/repo"（GitHub Actionsを即時起動）
+ *   GITHUB_TOKEN        repository_dispatch を送れる fine-grained PAT
  */
 
 var SHEET = {
   SCRIPTS: 'Scripts', // 撮影台本（セッション単位）
   QUESTIONS: 'Questions', // 台本内の質問（1行=1問）
   VIDEOS: 'Videos', // Slackに投げられた撮影動画の処理キュー
+  SHORTS: 'Shorts', // 生成済みショートの台帳（実体はSlack上のファイル）
   THEMES: 'Themes',
   LOG: 'Log',
 };
