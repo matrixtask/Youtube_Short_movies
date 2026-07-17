@@ -27,6 +27,14 @@ function doGet(e) {
     })).setMimeType(ContentService.MimeType.JSON);
   }
 
+  // 投稿時刻が来たショートを返す（`ytshorts publish` がYouTubeへ投稿する）
+  if (p.action === 'publish_queue') {
+    return ContentService.createTextOutput(JSON.stringify({
+      ok: true,
+      queue: listPublishQueue(),
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+
   // 生成済みショートの台帳を返す（まとめ動画の材料）
   if (p.action === 'shorts') {
     return ContentService.createTextOutput(JSON.stringify({
@@ -94,6 +102,16 @@ function doPost(e) {
     }
     registerShort(payload);
     return ContentService.createTextOutput(JSON.stringify({ ok: true }));
+  }
+
+  // YouTube投稿結果の報告
+  // 例: POST {"action":"published","token":"...","short_id":"...","ok":true,"detail":"https://youtube.com/shorts/..."}
+  if (payload.action === 'published') {
+    if (!payload.token || payload.token !== getProp('ADMIN_TOKEN')) {
+      return ContentService.createTextOutput(JSON.stringify({ ok: false, error: 'unauthorized' }));
+    }
+    var updated = markPublished(String(payload.short_id || ''), payload.ok !== false, String(payload.detail || ''));
+    return ContentService.createTextOutput(JSON.stringify({ ok: updated }));
   }
 
   // パイプラインからの動画単位の処理結果（元のスレッドに結果が返る）

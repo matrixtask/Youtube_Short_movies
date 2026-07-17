@@ -17,7 +17,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import compilation, cuts, gasapi, illustrations, planner, pull, render, slackup, subtitles
+from . import compilation, cuts, gasapi, illustrations, planner, pull, render, slackup, subtitles, youtube
 from .config import CONFIG_FILENAME, Config, load_config
 from .transcribe import all_words, load_or_transcribe
 
@@ -319,6 +319,37 @@ def cmd_compile(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_publish(args: argparse.Namespace) -> int:
+    """投稿時刻が来た承認済みショートをYouTubeへアップロードする。"""
+    cfg = load_config(args.config)
+    cfg.ensure_dirs()
+    queue = gasapi.fetch_publish_queue(cfg)
+    if not queue:
+        print("投稿待ちのショートはありません。")
+        return 0
+    creds = youtube.credentials_from_env()
+    token = pull.slack_token()
+    cache = cfg.workspace / "cache"
+    cache.mkdir(parents=True, exist_ok=True)
+    failed = 0
+    for item in queue:
+        dest = cache / f"{item['short_id']}.mp4"
+        try:
+            if not dest.exists():
+                print(f"⬇ {item['title']} をダウンロード中…")
+                pull.download_slack_file(item["url_private"], dest, token)
+            print(f"📤 YouTubeへアップロード中: {item['title']}")
+            url = youtube.upload_short(dest, item["title"], item.get("privacy", "private"), creds)
+            gasapi.mark_published(cfg, item["short_id"], True, url)
+            print(f"✅ {url}")
+        except Exception as e:
+            failed += 1
+            gasapi.mark_published(cfg, item["short_id"], False, str(e))
+            print(f"❌ {item['title']}: {e}", file=sys.stderr)
+    print(f"投稿 {len(queue) - failed}/{len(queue)} 本が完了しました。")
+    return 1 if failed else 0
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     cfg = load_config(args.config)
     index = load_index(cfg)
@@ -357,6 +388,10 @@ def main(argv: list[str] | None = None) -> int:
     p_comp.add_argument("--from-slack", action="store_true",
                         help="GASの台帳とSlack上のファイルを材料にし、結果もSlackへ投稿する（クラウド実行用）")
     p_comp.set_defaults(func=cmd_compile)
+
+    sub.add_parser(
+        "publish", help="投稿時刻が来た承認済みショートをYouTubeへ投稿する"
+    ).set_defaults(func=cmd_publish)
 
     sub.add_parser("list", help="ストック一覧").set_defaults(func=cmd_list)
 

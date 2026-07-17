@@ -41,6 +41,55 @@ function pickWeighted(items, weightFn, rand) {
 }
 
 /**
+ * 予約枠の計算（純粋関数）。
+ * @param {number} count           必要な枠数
+ * @param {Object} opts
+ *   now: Date                     現在時刻
+ *   slotTimes: ['08:00', ...]     1日の投稿枠（時刻）
+ *   taken: ['2026-07-16 08:00']   予約済み枠（fmt: yyyy-MM-dd HH:mm）
+ *   daysAhead: number             何日先まで見るか（既定14）
+ *   minLeadMinutes: number        現在からの最低リード時間（既定60）
+ *   maxPerDay: number             1日の最大投稿数（既定 slotTimes.length）
+ * @returns {string[]} 'yyyy-MM-dd HH:mm' の配列（昇順）
+ */
+function computeNextSlots(count, opts) {
+  var now = opts.now;
+  var slots = opts.slotTimes || [];
+  var taken = {};
+  (opts.taken || []).forEach(function (t) { taken[t] = true; });
+  var daysAhead = opts.daysAhead === undefined ? 14 : opts.daysAhead;
+  var lead = (opts.minLeadMinutes === undefined ? 60 : opts.minLeadMinutes) * 60 * 1000;
+  var maxPerDay = opts.maxPerDay || slots.length;
+  var result = [];
+
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function dayKey(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+
+  var perDay = {};
+  Object.keys(taken).forEach(function (t) {
+    var day = t.slice(0, 10);
+    perDay[day] = (perDay[day] || 0) + 1;
+  });
+
+  for (var d = 0; d <= daysAhead && result.length < count; d++) {
+    var day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + d);
+    var key = dayKey(day);
+    for (var s = 0; s < slots.length && result.length < count; s++) {
+      if ((perDay[key] || 0) >= maxPerDay) break;
+      var hm = slots[s].split(':');
+      var slotDate = new Date(day.getFullYear(), day.getMonth(), day.getDate(), Number(hm[0]), Number(hm[1]));
+      if (slotDate.getTime() < now.getTime() + lead) continue;
+      var slotKey = key + ' ' + pad(slotDate.getHours()) + ':' + pad(slotDate.getMinutes());
+      if (taken[slotKey]) continue;
+      taken[slotKey] = true;
+      perDay[key] = (perDay[key] || 0) + 1;
+      result.push(slotKey);
+    }
+  }
+  return result;
+}
+
+/**
  * Slackのts（例 "1784266535.690189"）まわりのヘルパー。
  * シートの数値化による精度落ちを防ぐため 'ts_' 接頭辞で保存する。
  */
@@ -68,5 +117,5 @@ function slackTsEqual(a, b) {
 
 // Nodeテスト用（GASでは module は未定義なので無視される）
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { parseJsonLoose: parseJsonLoose, pickWeighted: pickWeighted, rawSlackTs: rawSlackTs, normalizeSlackTs: normalizeSlackTs, slackTsEqual: slackTsEqual };
+  module.exports = { parseJsonLoose: parseJsonLoose, pickWeighted: pickWeighted, computeNextSlots: computeNextSlots, rawSlackTs: rawSlackTs, normalizeSlackTs: normalizeSlackTs, slackTsEqual: slackTsEqual };
 }

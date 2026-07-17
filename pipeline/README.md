@@ -23,12 +23,35 @@ Settings > Secrets and variables > Actions に4つのSecretsを入れるだけ:
 | `GAS_WEBAPP_URL` | GASのWebアプリURL |
 | `GAS_ADMIN_TOKEN` | GASの `ADMIN_TOKEN` と同じ値 |
 | `SLACK_BOT_TOKEN` | Slackボットトークン（files:read / files:write / chat:write） |
+| `YT_CLIENT_ID` | YouTube投稿用OAuthクライアントID（下記） |
+| `YT_CLIENT_SECRET` | 同クライアントシークレット |
+| `YT_REFRESH_TOKEN` | `youtube.upload` スコープのリフレッシュトークン |
 
 - **process-videos** — Slackに動画が届くとGASが即起動（`GITHUB_REPO`/`GITHUB_TOKEN`
   設定時）。保険として毎時も実行。生成したショートは元のスレッドに返り、
   台帳（Shortsシート）に登録される
+- **publish** — Slackで承認したショートの投稿時刻が来ると起動。
+  YouTube Data APIでアップロードし、結果URLをSlackに通知
 - **compile** — Slackで「まとめて」と書くと起動（Actionsタブから手動でも可）。
   Slack上のショートを集めて1本にまとめ、チャプター付きでSlackに投稿
+
+### YouTube OAuth の準備（初回のみ）
+
+1. [Google Cloud Console](https://console.cloud.google.com) でプロジェクトを作り、
+   **YouTube Data API v3** を有効化
+2. OAuthクライアント（種類: デスクトップアプリ）を作成 → ID/シークレットを控える
+3. リフレッシュトークンを取得: [OAuth 2.0 Playground](https://developers.google.com/oauthplayground)
+   の設定（歯車アイコン）で「Use your own OAuth credentials」に上のID/シークレットを入れ、
+   スコープ `https://www.googleapis.com/auth/youtube.upload` を承認 →
+   Step 2 の Refresh token を控える
+4. 3つの値をGitHub Secretsに登録
+
+注意:
+- YouTube APIの既定クォータ（10,000/日）では動画アップロードは**1日6本まで**。
+  GAS側の `MAX_UPLOADS_PER_DAY`（既定2）はこの範囲に収めてください
+- 審査（OAuth検証）前のAPIプロジェクトからのアップロードは、YouTube側で
+  **非公開ロック**される場合があります。まず `YOUTUBE_PRIVACY=private` で
+  動作確認 → 問題なければ検証申請して `public` 運用にするのが安全です
 
 ランナーはCPUなので文字起こしは `medium` モデルを使います（ワークフローの
 `YTSHORTS_WHISPER_MODEL` で変更可）。10分の動画で20分前後が目安です。
@@ -70,6 +93,7 @@ ytshorts run --force              # 文字起こし・プランを作り直す
 
 ```bash
 ytshorts list                     # ローカルストック一覧（スコア・秒数）
+ytshorts publish                  # 投稿時刻が来た承認済みショートをYouTubeへ
 ytshorts compile                  # ローカルのショートを1本のまとめ動画に
 ytshorts compile --from-slack     # Slack上のショートを材料に（クラウドと同じ動き）
 ytshorts compile --min-score 80 --limit 10

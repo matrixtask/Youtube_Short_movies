@@ -139,10 +139,11 @@ function markVideoDone(videoId, ok, summary) {
   return true;
 }
 
-/** 生成済みショートを台帳に登録する（パイプラインから呼ばれる） */
+/** 生成済みショートを台帳に登録し、承認依頼をSlackへ出す（パイプラインから呼ばれる） */
 function registerShort(payload) {
+  var shortId = newId('sh');
   appendRowObj(SHEET.SHORTS, {
-    short_id: newId('sh'),
+    short_id: shortId,
     created_at: fmtDateTime(nowJst()),
     video_id: String(payload.video_id || ''),
     script_id: String(payload.script_id || ''),
@@ -151,8 +152,18 @@ function registerShort(payload) {
     duration: String(payload.duration || ''),
     slack_file_id: String(payload.slack_file_id || ''),
     url_private: String(payload.url_private || ''),
-    status: 'stock',
+    status: isAutoApprove() ? SHORT_STATUS.APPROVED : SHORT_STATUS.STOCK,
+    scheduled_at: '',
+    youtube_url: '',
+    published_at: '',
   });
+  // 承認依頼は動画が届いたスレッドに出す
+  var threadTs = '';
+  var videos = readTable(SHEET.VIDEOS).filter(function (r) {
+    return String(r.video_id) === String(payload.video_id || '');
+  });
+  if (videos.length) threadTs = rawSlackTs(videos[videos.length - 1].thread_ts);
+  promptApproval(shortId, String(payload.title || ''), Number(payload.score) || 0, threadTs);
   return true;
 }
 

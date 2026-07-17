@@ -6,7 +6,7 @@ var SHEET_HEADERS = {
   Scripts: ['script_id', 'created_at', 'thread_ts', 'themes', 'status', 'shot_at', 'processed_at', 'note'],
   Questions: ['script_id', 'idx', 'theme', 'category', 'question', 'neta', 'hint'],
   Videos: ['video_id', 'created_at', 'script_id', 'thread_ts', 'file_id', 'file_name', 'url_private', 'size', 'status', 'processed_at'],
-  Shorts: ['short_id', 'created_at', 'video_id', 'script_id', 'title', 'score', 'duration', 'slack_file_id', 'url_private', 'status'],
+  Shorts: ['short_id', 'created_at', 'video_id', 'script_id', 'title', 'score', 'duration', 'slack_file_id', 'url_private', 'status', 'scheduled_at', 'youtube_url', 'published_at'],
   Themes: ['theme', 'category', 'weight', 'last_used', 'notes'],
   Log: ['timestamp', 'event', 'detail'],
 };
@@ -32,7 +32,8 @@ function setupSpreadsheet() {
     if (!sheet) sheet = spreadsheet.insertSheet(name);
     var headers = SHEET_HEADERS[name];
     var current = sheet.getRange(1, 1, 1, headers.length).getValues()[0];
-    if (String(current[0]) !== headers[0]) {
+    // 列の追加にも追従できるよう、ヘッダー行全体を比較して書き直す
+    if (JSON.stringify(current.map(String)) !== JSON.stringify(headers)) {
       sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
       sheet.setFrozenRows(1);
     }

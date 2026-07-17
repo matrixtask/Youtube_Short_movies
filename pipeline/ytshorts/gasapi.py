@@ -87,6 +87,45 @@ def register_short(cfg: Config, meta: dict) -> bool:
         return False
 
 
+def fetch_publish_queue(cfg: Config) -> list[dict]:
+    """投稿時刻が来たショートの一覧。各要素: {short_id, title, url_private, privacy}"""
+    if not cfg.gas_webapp_url or not cfg.gas_admin_token:
+        return []
+    url = (
+        cfg.gas_webapp_url
+        + "?" + urllib.parse.urlencode({"token": cfg.gas_admin_token, "action": "publish_queue"})
+    )
+    try:
+        with urllib.request.urlopen(url, timeout=30) as res:
+            data = json.loads(res.read().decode("utf-8"))
+    except Exception:
+        return []
+    if not data.get("ok"):
+        return []
+    return data.get("queue") or []
+
+
+def mark_published(cfg: Config, short_id: str, ok: bool, detail: str) -> bool:
+    """YouTube投稿結果を報告する（GASがシート更新とSlack通知を行う）。"""
+    if not cfg.gas_webapp_url or not cfg.gas_admin_token:
+        return False
+    payload = json.dumps({
+        "action": "published",
+        "token": cfg.gas_admin_token,
+        "short_id": short_id,
+        "ok": ok,
+        "detail": detail,
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        cfg.gas_webapp_url, data=payload, headers={"content-type": "application/json"}
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as res:
+            return json.loads(res.read().decode("utf-8")).get("ok", False)
+    except Exception:
+        return False
+
+
 def mark_video_done(cfg: Config, video_id: str, ok: bool, summary: str) -> bool:
     """動画単位の処理結果を報告する（GASが元のスレッドに結果を返す）。"""
     if not cfg.gas_webapp_url or not cfg.gas_admin_token:

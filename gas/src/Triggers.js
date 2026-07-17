@@ -6,13 +6,14 @@
  *   毎週月 9時台         weeklyDigest          … 未撮影・未処理の台本をリマインド
  */
 
-var TRIGGER_FUNCS = ['startDailyShootScript', 'weeklyDigest'];
+var TRIGGER_FUNCS = ['startDailyShootScript', 'weeklyDigest', 'youtubeTick'];
 
 function installTriggers() {
   deleteManagedTriggers();
   var hour = Number(getProp('SHOOT_HOUR', '8'));
   ScriptApp.newTrigger('startDailyShootScript').timeBased().atHour(hour).everyDays(1).create();
   ScriptApp.newTrigger('weeklyDigest').timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(9).create();
+  ScriptApp.newTrigger('youtubeTick').timeBased().everyHours(1).create();
   logEvent('triggers', 'トリガーを登録しました');
   return 'OK';
 }

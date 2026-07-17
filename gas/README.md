@@ -28,6 +28,10 @@ GASエディタ > プロジェクトの設定 > スクリプト プロパティ�
 | `SHOOT_HOUR` | 届く時刻（任意、既定8時台） |
 | `GITHUB_REPO` | クラウド実行用 `owner/repo`（任意。設定すると動画到着で即Actions起動） |
 | `GITHUB_TOKEN` | `repository_dispatch` を送れる fine-grained PAT（任意） |
+| `AUTO_APPROVE` | `true` で承認なしにYouTube投稿枠へ（任意、既定false） |
+| `YOUTUBE_SLOT_TIMES` | 1日の投稿枠 `08:00,19:00`（任意、既定） |
+| `MAX_UPLOADS_PER_DAY` | 1日の最大投稿数（任意、既定2） |
+| `YOUTUBE_PRIVACY` | `public` / `unlisted` / `private`（任意、既定public） |
 
 SlackアプリはX_Autopostと同じものを使い回せます（別チャンネルにするだけ）。
 Bot Token Scopes は `chat:write` に加えて **`files:read`**（動画のダウンロード）と
@@ -61,6 +65,9 @@ GASエディタから順に実行:
 - **撮った動画を台本のスレッドにそのまま投稿** → 編集キューに登録され、
   台本と自動で紐づく。**できあがったショートが同じスレッドに返ってくる**
   （チャンネル直下に投稿した場合は最新の台本に紐づきます）
+- ショートごとに承認依頼が届く → **「承認 xxxx」/「却下 xxxx」/「承認 全部」**
+  と返信（スレッド内でもチャンネル直下でもOK）。承認分は毎時の `youtubeTick` が
+  投稿枠に割り当て、時間が来るとYouTubeへ自動投稿されて結果URLが届く
 - チャンネルに **「まとめて」** と書くと、溜まったショートからまとめ動画が作られて届く
 - 「リテイク」→ 台本を作り直す
 - チャンネルに「台本」と書くと追加の台本がいつでももらえる

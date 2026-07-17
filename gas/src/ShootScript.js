@@ -142,6 +142,9 @@ function handleScriptReply(threadTs, text) {
   var scriptId = String(script.script_id);
   var trimmed = String(text || '').trim();
 
+  // スレッド内での「承認 xxxx」「却下 xxxx」も受け付ける
+  if (handleApprovalCommand(trimmed)) return true;
+
   if (/^(リテイク|作り直し|retake)$/i.test(trimmed)) {
     updateRowsWhere(SHEET.SCRIPTS, 'script_id', scriptId, { status: SCRIPT_STATUS.EXPIRED });
     sendSlack(':arrows_counterclockwise: 台本を作り直します…', threadTs);
@@ -174,6 +177,7 @@ function handleScriptReply(threadTs, text) {
  */
 function handleChannelMessage(text) {
   var trimmed = String(text || '').trim();
+  if (handleApprovalCommand(trimmed)) return true;
   if (/^(台本|撮影|インタビュー|script)$/i.test(trimmed)) {
     startExtraShootScript();
     return true;

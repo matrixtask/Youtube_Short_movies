@@ -15,6 +15,12 @@
  *   SHOOT_HOUR          台本を届ける時刻（既定: 8）
  *   GITHUB_REPO         クラウド実行用 "owner/repo"（GitHub Actionsを即時起動）
  *   GITHUB_TOKEN        repository_dispatch を送れる fine-grained PAT
+ *
+ * YouTube自動投稿:
+ *   AUTO_APPROVE        "true" で承認なしに自動で投稿枠へ（既定: false）
+ *   YOUTUBE_SLOT_TIMES  1日の投稿枠 "08:00,19:00"（既定）
+ *   MAX_UPLOADS_PER_DAY 1日の最大投稿数（既定: 2）
+ *   YOUTUBE_PRIVACY     public | unlisted | private（既定: public）
  */
 
 var SHEET = {
@@ -33,6 +39,15 @@ var SCRIPT_STATUS = {
   EXPIRED: 'expired',
 };
 
+var SHORT_STATUS = {
+  STOCK: 'stock', // 生成済み・承認待ち
+  APPROVED: 'approved', // 承認済み・投稿枠待ち
+  SCHEDULED: 'scheduled', // 投稿枠割当済み
+  PUBLISHED: 'published', // YouTube投稿済み
+  REJECTED: 'rejected',
+  FAILED: 'failed',
+};
+
 function props() {
   return PropertiesService.getScriptProperties().getProperties();
 }
@@ -46,6 +61,21 @@ function requireProp(key) {
   var v = getProp(key);
   if (!v) throw new Error('スクリプトプロパティ ' + key + ' が未設定です');
   return v;
+}
+
+function isAutoApprove() {
+  return String(getProp('AUTO_APPROVE', 'false')).toLowerCase() === 'true';
+}
+
+function ytSlotTimes() {
+  return String(getProp('YOUTUBE_SLOT_TIMES', '08:00,19:00'))
+    .split(',')
+    .map(function (s) { return s.trim(); })
+    .filter(Boolean);
+}
+
+function maxUploadsPerDay() {
+  return Number(getProp('MAX_UPLOADS_PER_DAY', '2'));
 }
 
 function nowJst() {
