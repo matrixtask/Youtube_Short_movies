@@ -1,0 +1,14 @@
+node_modules/
+.clasp.json
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+
+# パイプラインの作業ディレクトリ（動画・生成物はコミットしない）
+workspace/
+pipeline/config.yaml
+*.mp4
+*.mov
+*.MOV
+*.wav

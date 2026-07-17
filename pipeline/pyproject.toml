@@ -1,0 +1,20 @@
+[project]
+name = "ytshorts"
+version = "0.1.0"
+description = "撮りっぱなし動画をYouTubeショートに量産する編集パイプライン"
+requires-python = ">=3.10"
+dependencies = [
+    "pyyaml>=6.0",
+    "faster-whisper>=1.0",
+    "cairosvg>=2.7",
+]
+
+[project.scripts]
+ytshorts = "ytshorts.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["ytshorts"]

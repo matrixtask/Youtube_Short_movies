@@ -1,0 +1,26 @@
+# ytshorts の設定。`ytshorts init` でこのファイルが config.yaml にコピーされる。
+# APIキーは環境変数で渡す: ANTHROPIC_API_KEY / GAS_ADMIN_TOKEN
+
+# 作業ディレクトリ（inbox / sessions / shorts / compilations が作られる）
+workspace: workspace
+
+# 文字起こし（faster-whisper）
+whisper_model: large-v3   # 遅ければ medium / small に
+whisper_device: auto      # auto | cpu | cuda
+language: ja
+
+# 編集
+claude_model: claude-sonnet-5
+max_pause: 0.5            # これを超える沈黙（秒）はカット
+pad: 0.15                 # 発話の前後に残す秒数
+short_min_sec: 15
+short_max_sec: 59
+quality_threshold: 70     # このスコア未満のショートはレンダリングしない
+
+# 出力
+width: 1080
+height: 1920
+fps: 30
+
+# GAS撮影台本システムとの連携（任意。空なら台本なしで動く）
+gas_webapp_url: ""        # GASのWebアプリURL（gas/README.md参照）
