@@ -28,8 +28,10 @@ GASエディタ > プロジェクトの設定 > スクリプト プロパティ�
 | `SHOOT_HOUR` | 届く時刻（任意、既定8時台） |
 
 SlackアプリはX_Autopostと同じものを使い回せます（別チャンネルにするだけ）。
-新規に作る場合: Bot Token Scopes に `chat:write`、Event Subscriptions で
-`message.channels` を購読し、ボットをチャンネルに招待。
+Bot Token Scopes は `chat:write` に加えて **`files:read`**（動画のダウンロードに
+必要）。Event Subscriptions で `message.channels` を購読し、ボットをチャンネルに
+招待。動画アップロードのイベントも `message.channels`（subtype: file_share）で
+届くので追加の購読は不要です。
 
 ### 3. 初期化
 
@@ -49,10 +51,15 @@ GASエディタから順に実行:
 ## 日々の使い方
 
 - 朝、Slackに台本が届く → スマホで縦画面のまま1問ずつ答える動画を撮る
-- スレッドに「撮った」→ 取り込み手順のリマインドが返る
+- **撮った動画を台本のスレッドにそのまま投稿** → 編集キューに登録され、
+  台本と自動で紐づく。編集結果も同じスレッドに返ってくる
+  （チャンネル直下に投稿した場合は最新の台本に紐づきます）
 - 「リテイク」→ 台本を作り直す
 - チャンネルに「台本」と書くと追加の台本がいつでももらえる
 - それ以外の返信はメモとして保存され、次の台本生成のヒントになる
+
+動画の実処理はローカルPCの `ytshorts pull --watch`（常駐）が行います。
+セットアップは [../pipeline/README.md](../pipeline/README.md) を参照。
 
 ## Themesシート
 

@@ -1,6 +1,7 @@
 """cli.py — ytshorts コマンド。
 
   ytshorts init                 ワークスペースと設定ファイルを作る
+  ytshorts pull [--watch]       Slackに投げた動画を取り込んで自動処理（常駐可）
   ytshorts run [動画...]        取り込み〜ショート量産まで一気に実行
   ytshorts compile              溜まったショートを1本のまとめ動画に
   ytshorts list                 ショートのストック一覧
@@ -13,9 +14,10 @@ import datetime as dt
 import json
 import re
 import sys
+import time
 from pathlib import Path
 
-from . import compilation, cuts, gasapi, illustrations, planner, render, subtitles
+from . import compilation, cuts, gasapi, illustrations, planner, pull, render, subtitles
 from .config import CONFIG_FILENAME, Config, load_config
 from .transcribe import all_words, load_or_transcribe
 
@@ -167,6 +169,59 @@ def cmd_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def pull_once(cfg: Config) -> int:
+    """Slackに投げられた処理待ち動画を取り込んで処理する。処理した本数を返す。"""
+    videos = gasapi.fetch_pending_videos(cfg)
+    if not videos:
+        return 0
+    token = pull.slack_token()
+    index = load_index(cfg)
+    for v in videos:
+        name = f"{v['video_id']}_{pull.safe_filename(v.get('file_name'), v['video_id'])}"
+        dest = cfg.inbox / name
+        try:
+            if not dest.exists():
+                print(f"⬇ {v.get('file_name')} をダウンロード中…")
+                pull.download_slack_file(v["url_private"], dest, token)
+            script = {"script_id": v.get("script_id") or None, "questions": v.get("questions") or []}
+            made = process_video(dest, cfg, script if script["questions"] else None, force=False)
+            index.extend(made)
+            save_index(cfg, index)
+            summary = (
+                f"{v.get('file_name')} から {len(made)}本のショートを生成しました。\n"
+                + "\n".join(f"• {m['title']}（{m['score']}点 / {m['duration']}秒）" for m in made)
+            )
+            gasapi.mark_video_done(cfg, v["video_id"], True, summary)
+            print(f"✅ {v.get('file_name')}: ショート{len(made)}本")
+        except Exception as e:
+            gasapi.mark_video_done(cfg, v["video_id"], False, f"{v.get('file_name')}: {e}")
+            print(f"❌ {v.get('file_name')}: {e}", file=sys.stderr)
+    return len(videos)
+
+
+def cmd_pull(args: argparse.Namespace) -> int:
+    cfg = load_config(args.config)
+    cfg.ensure_dirs()
+    if not cfg.gas_webapp_url or not cfg.gas_admin_token:
+        print("gas_webapp_url（config.yaml）と GAS_ADMIN_TOKEN（環境変数）の設定が必要です。")
+        return 1
+    pull.slack_token()  # 早めに未設定を検出する
+    if not args.watch:
+        n = pull_once(cfg)
+        print("新着動画はありません。" if n == 0 else f"{n}本を処理しました。")
+        return 0
+    print(f"Slackの新着動画を監視中…（{args.interval}秒間隔、Ctrl+Cで終了）")
+    try:
+        while True:
+            try:
+                pull_once(cfg)
+            except Exception as e:
+                print(f"⚠ {e}", file=sys.stderr)
+            time.sleep(args.interval)
+    except KeyboardInterrupt:
+        return 0
+
+
 def cmd_compile(args: argparse.Namespace) -> int:
     cfg = load_config(args.config)
     cfg.ensure_dirs()
@@ -209,6 +264,11 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("init", help="ワークスペースと設定ファイルを作る").set_defaults(func=cmd_init)
+
+    p_pull = sub.add_parser("pull", help="Slackに投げた動画を取り込んで自動処理する")
+    p_pull.add_argument("--watch", action="store_true", help="常駐して新着を監視し続ける")
+    p_pull.add_argument("--interval", type=int, default=300, help="監視間隔（秒、既定300）")
+    p_pull.set_defaults(func=cmd_pull)
 
     p_run = sub.add_parser("run", help="動画からショートを量産する")
     p_run.add_argument("videos", nargs="*", help="動画ファイル（省略時は inbox 内すべて）")

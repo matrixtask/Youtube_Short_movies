@@ -5,8 +5,8 @@
  *   1. 朝のトリガーで startDailyShootScript() が実行される
  *   2. テーマ選定 → Claudeが「カメラに向かって答える用」の質問+ネタ指示を生成
  *   3. Slackに台本が届く → スマホで質問に答える動画を撮る（通しでOK）
- *   4. スレッドに「撮った」と返信 → 取り込み手順のリマインド
- *   5. 動画をPCの inbox に置いて `ytshorts run` → 編集は全部自動
+ *   4. 撮った動画をそのままスレッドに投稿 → Videos.js が編集キューに登録
+ *   5. ローカル常駐の `ytshorts pull --watch` が自動でDL・編集 → 結果がスレッドに返る
  *
  * スレッド内で使える言葉:
  *   リテイク … 台本を作り直す
@@ -53,7 +53,7 @@ function startShootScript(kind, title) {
     '',
     '撮り方: スマホを縦にして、1問ずつカメラに向かって答えるだけ。1本の動画で通しでOK。',
     '言い直し・変な間・噛みは気にしない（編集で全部消えます）。',
-    '撮り終わったらこのスレッドに「撮った」と返信 → 動画をPCの inbox に入れて ytshorts run。',
+    '撮り終わったら *このスレッドに動画をそのまま投稿* してください。あとは全部自動です。',
   ].join('\n');
   var parent = sendSlack(intro);
   var threadTs = parent.ts;
@@ -155,13 +155,8 @@ function handleScriptReply(threadTs, text) {
       shot_at: fmtDateTime(nowJst()),
     });
     sendSlack(
-      [
-        ':clapper: 撮影おつかれさまです！あとの編集は全部自動です:',
-        '1. 動画ファイルをPCの `workspace/inbox/` に入れる',
-        '2. `ytshorts run` を実行（文字起こし→間カット→字幕・挿絵→ショート量産）',
-        '3. できたショートは `workspace/shorts/` に溜まります',
-        '処理が終わるとこのチャンネルに結果が届きます。',
-      ].join('\n'),
+      ':clapper: 撮影おつかれさまです！動画をこのスレッドにそのまま投稿してください。\n' +
+      '受け取り次第、編集キューに入れて自動処理します（文字起こし→間カット→字幕・挿絵→ショート量産）。',
       threadTs
     );
     return true;

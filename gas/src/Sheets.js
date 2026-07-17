@@ -5,6 +5,7 @@
 var SHEET_HEADERS = {
   Scripts: ['script_id', 'created_at', 'thread_ts', 'themes', 'status', 'shot_at', 'processed_at', 'note'],
   Questions: ['script_id', 'idx', 'theme', 'category', 'question', 'neta', 'hint'],
+  Videos: ['video_id', 'created_at', 'script_id', 'thread_ts', 'file_id', 'file_name', 'url_private', 'size', 'status', 'processed_at'],
   Themes: ['theme', 'category', 'weight', 'last_used', 'notes'],
   Log: ['timestamp', 'event', 'detail'],
 };

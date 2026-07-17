@@ -18,6 +18,7 @@
 var SHEET = {
   SCRIPTS: 'Scripts', // 撮影台本（セッション単位）
   QUESTIONS: 'Questions', // 台本内の質問（1行=1問）
+  VIDEOS: 'Videos', // Slackに投げられた撮影動画の処理キュー
   THEMES: 'Themes',
   LOG: 'Log',
 };

@@ -18,6 +18,12 @@ function doGet(e) {
       .setMimeType(ContentService.MimeType.JSON);
   }
 
+  // 処理待ちの動画を返す（`ytshorts pull` が取得してダウンロード・編集する）
+  if (p.action === 'videos') {
+    return ContentService.createTextOutput(JSON.stringify({ ok: true, videos: listPendingVideos() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   // 最近の台本と質問を返す（パイプラインが編集プランの文脈に使う）
   if (p.action === 'scripts') {
     var limit = Number(p.limit || 3);
@@ -67,6 +73,16 @@ function doPost(e) {
     return ContentService.createTextOutput(payload.challenge);
   }
 
+  // パイプラインからの動画単位の処理結果（元のスレッドに結果が返る）
+  // 例: POST {"action":"video_done","token":"...","video_id":"...","ok":true,"summary":"..."}
+  if (payload.action === 'video_done') {
+    if (!payload.token || payload.token !== getProp('ADMIN_TOKEN')) {
+      return ContentService.createTextOutput(JSON.stringify({ ok: false, error: 'unauthorized' }));
+    }
+    var found = markVideoDone(String(payload.video_id || ''), payload.ok !== false, String(payload.summary || ''));
+    return ContentService.createTextOutput(JSON.stringify({ ok: found }));
+  }
+
   // パイプラインからの処理結果レポート
   // 例: POST {"action":"report","token":"...","script_id":"...","summary":"3本のショートを生成..."}
   if (payload.action === 'report') {
@@ -94,14 +110,17 @@ function doPost(e) {
       if (cache.get('ev_' + eventId)) return ContentService.createTextOutput('dup');
       cache.put('ev_' + eventId, '1', 3600);
     }
+    var subtype = String(event.subtype || '');
     if (
       event.type === 'message' &&
       !event.bot_id &&
-      !event.subtype &&
+      (subtype === '' || subtype === 'file_share') && // 動画アップロードは file_share で届く
       String(event.channel).trim() === String(getProp('SLACK_CHANNEL_ID') || '').trim()
     ) {
       try {
-        if (event.thread_ts) {
+        if (event.files && event.files.length) {
+          handleVideoUpload(event);
+        } else if (event.thread_ts) {
           handleScriptReply(event.thread_ts, event.text);
         } else {
           handleChannelMessage(event.text);
