@@ -3,10 +3,42 @@
 from __future__ import annotations
 
 import json
+import sys
 import urllib.parse
 import urllib.request
 
 from .config import Config
+
+
+def _get_json(cfg: Config, action: str) -> dict | None:
+    """GASのGET APIを叩く。失敗理由は握りつぶさず警告として表示する。"""
+    url = (
+        cfg.gas_webapp_url
+        + "?" + urllib.parse.urlencode({"token": cfg.gas_admin_token, "action": action})
+    )
+    try:
+        with urllib.request.urlopen(url, timeout=30) as res:
+            body = res.read().decode("utf-8")
+    except Exception as e:
+        print(f"⚠ GAS APIに接続できません（action={action}）: {e}", file=sys.stderr)
+        return None
+    try:
+        data = json.loads(body)
+    except ValueError:
+        print(
+            f"⚠ GASがJSON以外を返しました（action={action}）。"
+            "GAS_WEBAPP_URL が正しいデプロイ（アクセス: 全員）のURLか確認してください",
+            file=sys.stderr,
+        )
+        return None
+    if not data.get("ok"):
+        print(
+            f"⚠ GAS APIがエラーを返しました（action={action}）: {data.get('error')}。"
+            "GAS_ADMIN_TOKEN がGASのスクリプトプロパティと一致しているか確認してください",
+            file=sys.stderr,
+        )
+        return None
+    return data
 
 
 def fetch_latest_script(cfg: Config) -> dict | None:
@@ -38,17 +70,10 @@ def fetch_pending_videos(cfg: Config) -> dict:
     """
     empty = {"channel": "", "videos": []}
     if not cfg.gas_webapp_url or not cfg.gas_admin_token:
+        print("⚠ gas_webapp_url / GAS_ADMIN_TOKEN が未設定です", file=sys.stderr)
         return empty
-    url = (
-        cfg.gas_webapp_url
-        + "?" + urllib.parse.urlencode({"token": cfg.gas_admin_token, "action": "videos"})
-    )
-    try:
-        with urllib.request.urlopen(url, timeout=30) as res:
-            data = json.loads(res.read().decode("utf-8"))
-    except Exception:
-        return empty
-    if not data.get("ok"):
+    data = _get_json(cfg, "videos")
+    if data is None:
         return empty
     return {"channel": data.get("channel", ""), "videos": data.get("videos") or []}
 
@@ -57,17 +82,10 @@ def fetch_shorts(cfg: Config) -> dict:
     """ショート台帳を取得する。{"channel": "...", "shorts": [...]}"""
     empty = {"channel": "", "shorts": []}
     if not cfg.gas_webapp_url or not cfg.gas_admin_token:
+        print("⚠ gas_webapp_url / GAS_ADMIN_TOKEN が未設定です", file=sys.stderr)
         return empty
-    url = (
-        cfg.gas_webapp_url
-        + "?" + urllib.parse.urlencode({"token": cfg.gas_admin_token, "action": "shorts"})
-    )
-    try:
-        with urllib.request.urlopen(url, timeout=30) as res:
-            data = json.loads(res.read().decode("utf-8"))
-    except Exception:
-        return empty
-    if not data.get("ok"):
+    data = _get_json(cfg, "shorts")
+    if data is None:
         return empty
     return {"channel": data.get("channel", ""), "shorts": data.get("shorts") or []}
 
@@ -90,17 +108,10 @@ def register_short(cfg: Config, meta: dict) -> bool:
 def fetch_publish_queue(cfg: Config) -> list[dict]:
     """投稿時刻が来たショートの一覧。各要素: {short_id, title, url_private, privacy}"""
     if not cfg.gas_webapp_url or not cfg.gas_admin_token:
+        print("⚠ gas_webapp_url / GAS_ADMIN_TOKEN が未設定です", file=sys.stderr)
         return []
-    url = (
-        cfg.gas_webapp_url
-        + "?" + urllib.parse.urlencode({"token": cfg.gas_admin_token, "action": "publish_queue"})
-    )
-    try:
-        with urllib.request.urlopen(url, timeout=30) as res:
-            data = json.loads(res.read().decode("utf-8"))
-    except Exception:
-        return []
-    if not data.get("ok"):
+    data = _get_json(cfg, "publish_queue")
+    if data is None:
         return []
     return data.get("queue") or []
 
