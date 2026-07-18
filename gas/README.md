@@ -39,7 +39,8 @@ GASエディタ > プロジェクトの設定 > スクリプト プロパティ�
 | `YOUTUBE_PRIVACY` | `public` / `unlisted` / `private`（任意、既定public） |
 
 SlackアプリはX_Autopostと同じものを使い回せます（別チャンネルにするだけ）。
-Bot Token Scopes は `chat:write` に加えて **`files:read`**（動画のダウンロード）と
+Bot Token Scopes は `chat:write` / `channels:history`（イベント購読に必須）に
+加えて **`files:read`**（動画のダウンロード）と
 **`files:write`**（生成したショートをスレッドに返すのに必要）。
 Event Subscriptions で `message.channels` を購読し、ボットをチャンネルに招待。
 動画アップロードのイベントも `message.channels`（subtype: file_share）で届くので

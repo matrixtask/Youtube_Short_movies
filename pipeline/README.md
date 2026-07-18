@@ -22,7 +22,7 @@ Settings > Secrets and variables > Actions に4つのSecretsを入れるだけ:
 | `ANTHROPIC_API_KEY` | Claude APIキー |
 | `GAS_WEBAPP_URL` | GASのWebアプリURL |
 | `GAS_ADMIN_TOKEN` | GASの `ADMIN_TOKEN` と同じ値 |
-| `SLACK_BOT_TOKEN` | Slackボットトークン（files:read / files:write / chat:write） |
+| `SLACK_BOT_TOKEN` | Slackボットトークン（chat:write / channels:history / files:read / files:write） |
 | `YT_CLIENT_ID` | YouTube投稿用OAuthクライアントID（下記） |
 | `YT_CLIENT_SECRET` | 同クライアントシークレット |
 | `YT_REFRESH_TOKEN` | `youtube.upload` スコープのリフレッシュトークン |

@@ -14,6 +14,7 @@ oauth_config:
   scopes:
     bot:
       - chat:write
+      - channels:history # message.channelsイベントの購読に必須
       - files:read
       - files:write
 settings:
