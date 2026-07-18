@@ -23,10 +23,17 @@ function getSheet(name) {
 
 /**
  * 初回セットアップ: シート作成 + ヘッダー + テーマ初期データ投入。
- * GASエディタから手動で1回実行する。
+ * SPREADSHEET_ID が未設定ならスプレッドシートも自動で作る。
+ * GASエディタから手動で1回実行する（列を増やす更新後の再実行も安全）。
  */
 function setupSpreadsheet() {
-  var spreadsheet = ss();
+  var spreadsheet;
+  if (getProp('SPREADSHEET_ID')) {
+    spreadsheet = ss();
+  } else {
+    spreadsheet = SpreadsheetApp.create('YouTube Shorts 台本DB');
+    PropertiesService.getScriptProperties().setProperty('SPREADSHEET_ID', spreadsheet.getId());
+  }
   Object.keys(SHEET_HEADERS).forEach(function (name) {
     var sheet = spreadsheet.getSheetByName(name);
     if (!sheet) sheet = spreadsheet.insertSheet(name);

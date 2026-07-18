@@ -62,13 +62,32 @@
 gas/                撮影台本システム（Google Apps Script + Slack + スプレッドシート）
 pipeline/           編集パイプライン（Python + faster-whisper + Claude + ffmpeg）
 .github/workflows/  クラウド実行（動画処理 process-videos / YouTube投稿 publish / まとめ動画 compile）
+setup/              対話式セットアップウィザード
 ```
 
-セットアップ手順:
+## クイックセットアップ
 
-- 台本がSlackに届くようにする → **[gas/README.md](gas/README.md)**
-- 編集パイプライン（クラウド実行のSecrets設定 / ローカル実行）→
-  **[pipeline/README.md](pipeline/README.md)**
+```bash
+npm i -g @google/clasp && clasp login   # GAS自動デプロイ用（任意だが推奨）
+python3 setup/setup.py
+```
+
+ウィザードが、ADMIN_TOKENの生成 / YouTubeのOAuth承認（ブラウザが開くだけ）/
+GASプロジェクトの作成とデプロイ / Slackアプリのマニフェスト生成 /
+GitHub Secretsの登録までやります。残る手作業は
+**GASエディタで `applyLocalProps()` → `setupAll()` を実行する**（権限承認込みで
+2クリック。スプレッドシートも自動作成）などの数ステップだけで、ウィザードの
+最後に一覧が表示されます。詳細・手動手順は
+**[gas/README.md](gas/README.md)** と **[pipeline/README.md](pipeline/README.md)**。
 
 クラウドなしでも動きます: PCで `ytshorts pull --watch` を常駐させるか、動画を
 `workspace/inbox/` に入れて `ytshorts run` する手動モードも残してあります。
+
+## なぜGAS + GitHub Actionsの2段構成？
+
+- **GAS** — 司令塔。台本・受付・承認・投稿スケジュール。常時起動が必要な部分は
+  ここで完結（無料・サーバーレス）
+- **Claude** — 編集の頭脳。切る場所・字幕・ネタ・採点・挿絵をすべて判断
+- **GitHub Actions** — 編集の手。whisper（文字起こし）とffmpeg（実際の
+  カット・字幕焼き込み・レンダリング）は計算処理なので、GASでもClaude APIでも
+  実行できない。その計算機役を無料枠のActionsが担う

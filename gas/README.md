@@ -1,16 +1,21 @@
 # gas/ — 撮影台本システム（Google Apps Script）
 
-毎朝Slackに「撮影台本」（質問＋ネタ指示）を届ける部分です。X_Autopost と同じ
+毎朝Slackに「撮影台本」（質問＋ネタ指示）を届け、動画の受付・承認・
+YouTube投稿スケジュールを司る部分です。X_Autopost と同じ
 GAS + スプレッドシート + Slack の構成で、サーバー運用は不要です。
+
+> **まずはリポジトリルートの `python3 setup/setup.py`（ウィザード）を推奨。**
+> 以下はウィザードが内部でやっていることの手動版です。
 
 ## セットアップ
 
-### 1. スプレッドシートとGASプロジェクト
+### 1. GASプロジェクト
 
-1. Googleスプレッドシートを新規作成し、IDを控える（URLの `/d/` と `/edit` の間）
-2. [script.google.com](https://script.google.com) で新規プロジェクトを作成
-3. `src/` 以下のファイルをコピペで貼り付ける（clasp を使うなら
+1. [script.google.com](https://script.google.com) で新規プロジェクトを作成し、
+   `src/` 以下のファイルをコピペで貼り付ける（clasp なら
    `.clasp.json.example` を `.clasp.json` にコピーして `clasp push`）
+2. スプレッドシートは不要 — `setupAll()` 実行時に自動作成されます
+   （既存を使う場合のみ `SPREADSHEET_ID` を設定）
 
 ### 2. スクリプトプロパティ
 
@@ -18,7 +23,7 @@ GASエディタ > プロジェクトの設定 > スクリプト プロパティ�
 
 | キー | 内容 |
 |---|---|
-| `SPREADSHEET_ID` | 手順1のスプレッドシートID |
+| `SPREADSHEET_ID` | 既存シートを使う場合のみ（未設定なら自動作成） |
 | `ANTHROPIC_API_KEY` | Claude APIキー |
 | `SLACK_BOT_TOKEN` | Slackボットトークン (`xoxb-...`) |
 | `SLACK_CHANNEL_ID` | 台本を届けるチャンネルID |
@@ -46,10 +51,14 @@ Event Subscriptions で `message.channels` を購読し、ボットをチャン�
 
 ### 3. 初期化
 
-GASエディタから順に実行:
+GASエディタから `setupAll()` を実行するだけ（スプレッドシート自動作成＋
+シート初期化＋トリガー登録＋Slackテスト通知まで一括）。
+ウィザードを使った場合は、その前に `applyLocalProps()` を実行して
+プロパティを流し込みます。
 
-1. `setupSpreadsheet()` — シート作成＋テーマ初期データ投入
-2. `installTriggers()` — 毎朝の台本トリガー＋週次サマリーを登録
+Slackアプリは `setup/slack-app-manifest.yaml` を
+[api.slack.com/apps](https://api.slack.com/apps) の「Create New App > From a
+manifest」に貼れば、スコープ・イベント購読込みで一発で作れます。
 
 ### 4. Webアプリのデプロイ
 

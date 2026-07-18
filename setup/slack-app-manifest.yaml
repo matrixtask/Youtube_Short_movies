@@ -1,0 +1,26 @@
+# Slackアプリをワンクリックで作るためのマニフェスト。
+# setup/setup.py が request_url を埋めた slack-app-manifest.generated.yaml を作る。
+# 手動で使う場合: https://api.slack.com/apps → Create New App → From a manifest
+# → これを貼り付けて REQUEST_URL をGASのWebアプリURLに置き換える。
+display_information:
+  name: Shorts Studio
+  description: 撮影台本と動画編集のアシスタント
+  background_color: "#d40000"
+features:
+  bot_user:
+    display_name: shorts-studio
+    always_online: true
+oauth_config:
+  scopes:
+    bot:
+      - chat:write
+      - files:read
+      - files:write
+settings:
+  event_subscriptions:
+    request_url: REQUEST_URL
+    bot_events:
+      - message.channels
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false
