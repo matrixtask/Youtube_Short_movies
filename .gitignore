@@ -2,6 +2,7 @@ node_modules/
 .clasp.json
 gas/src/SetupProps.local.js
 setup/slack-app-manifest.generated.yaml
+setup/github-secrets.local.txt
 __pycache__/
 *.pyc
 .pytest_cache/

@@ -242,16 +242,28 @@ def main() -> int:
         print("  GASへ反映済み。")
 
     step("6/6 GitHub Actions の Secrets 登録")
+    secrets_map = {
+        "ANTHROPIC_API_KEY": anthropic_key,
+        "GAS_WEBAPP_URL": webapp_url,
+        "GAS_ADMIN_TOKEN": admin_token,
+        "SLACK_BOT_TOKEN": slack_token,
+        "YT_CLIENT_ID": yt_client_id,
+        "YT_CLIENT_SECRET": yt_client_secret,
+        "YT_REFRESH_TOKEN": yt_refresh,
+    }
+    # gh CLIが使えない環境向けに、Web UIへ貼り付ける用のファイルにも書き出す
+    secrets_file = ROOT / "setup" / "github-secrets.local.txt"
+    lines = [
+        "# GitHubの Settings > Secrets and variables > Actions に登録する値",
+        f"# https://github.com/{repo or 'OWNER/REPO'}/settings/secrets/actions",
+        "# 注意: GAS_ADMIN_TOKEN はGASのスクリプトプロパティ ADMIN_TOKEN と同じ値にすること",
+        "# 登録が済んだらこのファイルは削除してください",
+        "",
+    ] + [f"{k}={v}" for k, v in secrets_map.items() if v]
+    secrets_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"  貼り付け用に書き出しました: {secrets_file}")
     if repo:
-        gh_set_secrets(repo, {
-            "ANTHROPIC_API_KEY": anthropic_key,
-            "GAS_WEBAPP_URL": webapp_url,
-            "GAS_ADMIN_TOKEN": admin_token,
-            "SLACK_BOT_TOKEN": slack_token,
-            "YT_CLIENT_ID": yt_client_id,
-            "YT_CLIENT_SECRET": yt_client_secret,
-            "YT_REFRESH_TOKEN": yt_refresh,
-        })
+        gh_set_secrets(repo, secrets_map)
 
     print("\n=== 残りの手作業（ここだけは自動化できません） ===")
     print("1. GASエディタを開く（gas/ で `clasp open`）→ applyLocalProps() を実行")
