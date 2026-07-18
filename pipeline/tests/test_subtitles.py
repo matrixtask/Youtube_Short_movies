@@ -88,6 +88,22 @@ class TestBuildEvents:
         assert "0:00:05.00,0:00:07.00" in events[0]
 
 
+class TestFitLayoutTitle:
+    def test_title_shown_for_whole_short(self):
+        short = {"title": "渋滞の話", "hook": "", "captions": [], "overlays": []}
+        events = build_events(short, [(10.0, 25.0)], layout="fit")
+        assert len(events) == 1
+        assert "Title" in events[0]
+        assert "0:00:15.00" in events[0]  # カット後の長さ = 15秒ぶん表示
+
+    def test_no_title_event_in_crop_layout(self):
+        short = {"title": "渋滞の話", "hook": "", "captions": [], "overlays": []}
+        assert build_events(short, [(10.0, 25.0)], layout="crop") == []
+
+    def test_header_has_title_style(self):
+        assert "Style: Title," in build_ass_header()
+
+
 class TestBuildAss:
     def test_full_document(self):
         short = {

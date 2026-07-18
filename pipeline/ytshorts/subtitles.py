@@ -40,12 +40,14 @@ def build_ass_header(
     caption_color: str = "#FFFFFF",
     hook_color: str = "#FFE600",
     tsukkomi_color: str = "#FFD700",
+    title_color: str = "#FFFFFF",
 ) -> str:
-    # Caption=下部中央 / Hook=中央上寄りの大テキスト / Tsukkomi=上部のネタ字幕。
-    # 縦横どちらでも使えるよう、余白は高さに比例させる
+    # Caption=下部中央 / Hook=中央上寄りの大テキスト / Tsukkomi=上部のネタ字幕 /
+    # Title=上帯の常時タイトル（fitレイアウト用）。余白は高さに比例させる
     mv_caption = round(height * 0.177)
     mv_hook = round(height * 0.219)
     mv_tsukkomi = round(height * 0.365)
+    mv_title = round(height * 0.055)
     return f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {width}
@@ -58,14 +60,18 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
 Style: Caption,{font},72,{ass_color(caption_color)},&H000000FF,&H00101010,&H96000000,-1,0,0,0,100,100,0,0,1,5,2,2,60,60,{mv_caption},1
 Style: Hook,{font},96,{ass_color(hook_color)},&H000000FF,&H00101010,&H96000000,-1,0,0,0,100,100,0,0,1,7,3,8,60,60,{mv_hook},1
 Style: Tsukkomi,{font},66,{ass_color(tsukkomi_color)},&H000000FF,&H00101010,&H96000000,-1,0,0,0,100,100,0,0,1,5,2,8,60,60,{mv_tsukkomi},1
+Style: Title,{font},84,{ass_color(title_color)},&H000000FF,&H00101010,&H96000000,-1,0,0,0,100,100,0,0,1,4,2,8,60,60,{mv_title},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
 
 
-def build_events(short: dict, keep: list[tuple[float, float]]) -> list[str]:
-    """ショート1本ぶんのASSイベント行を作る（出力タイムライン基準）。"""
+def build_events(short: dict, keep: list[tuple[float, float]], layout: str = "crop") -> list[str]:
+    """ショート1本ぶんのASSイベント行を作る（出力タイムライン基準）。
+
+    layout='fit' のときは上帯にタイトルを常時表示する。
+    """
     events: list[str] = []
 
     def dialogue(style: str, start: float, end: float, text: str) -> str:
@@ -73,6 +79,10 @@ def build_events(short: dict, keep: list[tuple[float, float]]) -> list[str]:
             f"Dialogue: 0,{format_ass_time(start)},{format_ass_time(end)},"
             f"{style},,0,0,0,,{ass_escape(text)}"
         )
+
+    if layout == "fit" and short.get("title"):
+        total = cuts.total_kept(keep) or 3600.0
+        events.append(dialogue("Title", 0.0, total, short["title"]))
 
     if short.get("hook"):
         events.append(dialogue("Hook", 0.0, HOOK_DURATION, short["hook"]))
@@ -90,5 +100,12 @@ def build_events(short: dict, keep: list[tuple[float, float]]) -> list[str]:
     return events
 
 
-def build_ass(short: dict, keep: list[tuple[float, float]], width: int = 1080, height: int = 1920, **style) -> str:
-    return build_ass_header(width, height, **style) + "\n".join(build_events(short, keep)) + "\n"
+def build_ass(
+    short: dict,
+    keep: list[tuple[float, float]],
+    width: int = 1080,
+    height: int = 1920,
+    layout: str = "crop",
+    **style,
+) -> str:
+    return build_ass_header(width, height, **style) + "\n".join(build_events(short, keep, layout)) + "\n"

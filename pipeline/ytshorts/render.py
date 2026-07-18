@@ -17,6 +17,12 @@ def escape_filter_path(path: str) -> str:
     return str(path).replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
 
 
+def band_color_arg(hex_color: str) -> str:
+    """'#RRGGBB' をffmpegのcolor引数 '0xRRGGBB' にする（純粋）。"""
+    h = str(hex_color).lstrip("#")
+    return f"0x{h}" if len(h) == 6 else "0x101820"
+
+
 def build_filter_complex(
     keep: list[tuple[float, float]],
     subs_path: str | None,
@@ -24,6 +30,8 @@ def build_filter_complex(
     width: int = 1080,
     height: int = 1920,
     fps: int = 30,
+    fit: bool = False,
+    band_color: str = "#101820",
 ) -> str:
     """ショート1本ぶんの filter_complex を組み立てる。
 
@@ -31,6 +39,8 @@ def build_filter_complex(
     subs_path     : ASSファイルのパス（Noneなら字幕なし）
     illustrations : [(入力インデックス, 出力開始秒, 出力終了秒), ...]
                     入力インデックスは ffmpeg コマンドの -i の並び（動画が0）
+    fit           : True なら横型ソースを横幅フィットで縮小し、上下を帯で埋める
+                    （タイトル・字幕は帯に載る）。False は中央切り抜き
     """
     if not keep:
         raise ValueError("keep intervals が空です")
@@ -41,10 +51,18 @@ def build_filter_complex(
     pairs = "".join(f"[v{i}][a{i}]" for i in range(len(keep)))
     parts.append(f"{pairs}concat=n={len(keep)}:v=1:a=1[vcut][acut]")
 
-    chain = (
-        f"[vcut]scale={width}:{height}:force_original_aspect_ratio=increase,"
-        f"crop={width}:{height},fps={fps},setsar=1"
-    )
+    if fit:
+        # 横幅フィット + 上下帯（映像は中央よりやや上に置き、下の帯を字幕用に広く取る）
+        chain = (
+            f"[vcut]scale={width}:-2,"
+            f"pad={width}:{height}:0:(oh-ih)*0.42:color={band_color_arg(band_color)},"
+            f"fps={fps},setsar=1"
+        )
+    else:
+        chain = (
+            f"[vcut]scale={width}:{height}:force_original_aspect_ratio=increase,"
+            f"crop={width}:{height},fps={fps},setsar=1"
+        )
     label = "vfmt"
     parts.append(f"{chain}[{label}]")
 
@@ -72,6 +90,7 @@ def build_short_command(
     out_path: Path,
     cfg: Config,
     size: tuple[int, int] | None = None,
+    fit: bool = False,
 ) -> list[str]:
     """ffmpeg コマンド全体を組み立てる（純粋）。size で出力解像度を上書きできる。"""
     width, height = size or (cfg.width, cfg.height)
@@ -87,6 +106,8 @@ def build_short_command(
         width,
         height,
         cfg.fps,
+        fit=fit,
+        band_color=cfg.band_color,
     )
     cmd += [
         "-filter_complex", fc,
@@ -107,8 +128,9 @@ def render_short(
     out_path: Path,
     cfg: Config,
     size: tuple[int, int] | None = None,
+    fit: bool = False,
 ) -> None:
-    cmd = build_short_command(video, keep, subs_path, illustration_files, out_path, cfg, size)
+    cmd = build_short_command(video, keep, subs_path, illustration_files, out_path, cfg, size, fit)
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
         raise RuntimeError(f"ffmpeg failed:\n{proc.stderr[-2000:]}")

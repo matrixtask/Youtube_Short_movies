@@ -117,20 +117,26 @@ def process_video(video: Path, cfg: Config, script: dict | None, force: bool) ->
             "caption_color": cfg.caption_color,
             "hook_color": cfg.hook_color,
             "tsukkomi_color": cfg.tsukkomi_color,
+            "title_color": cfg.title_color,
         }
+        # 横型ソースは既定で「横幅フィット+上下帯（帯にタイトル）」でショート化する
+        landscape = is_landscape(video)
+        fit = landscape and cfg.shorts_layout == "fit"
         subs_path = session_dir / f"{short['id']}.ass"
         subs_path.write_text(
-            subtitles.build_ass(short, keep, cfg.width, cfg.height, **style), encoding="utf-8"
+            subtitles.build_ass(short, keep, cfg.width, cfg.height,
+                                layout="fit" if fit else "crop", **style),
+            encoding="utf-8",
         )
 
         out_name = f"{video.stem}_{short['id']}_{slugify(short['title'])}.mp4"
         out_path = cfg.shorts_dir / out_name
         print("[4/4] レンダリング中…")
-        render.render_short(video, keep, subs_path, ill_files, out_path, cfg)
+        render.render_short(video, keep, subs_path, ill_files, out_path, cfg, fit=fit)
 
         # 横型ソースなら、まとめ動画・ロング動画用に16:9ワイド版も作る
         wide_name = ""
-        if cfg.wide_enabled and is_landscape(video):
+        if cfg.wide_enabled and landscape:
             wide_name = f"{video.stem}_{short['id']}_wide.mp4"
             wide_subs = session_dir / f"{short['id']}_wide.ass"
             wide_subs.write_text(

@@ -3,7 +3,24 @@ from pathlib import Path
 import pytest
 
 from ytshorts.config import Config
-from ytshorts.render import build_filter_complex, build_short_command, escape_filter_path
+from ytshorts.render import band_color_arg, build_filter_complex, build_short_command, escape_filter_path
+
+
+class TestFitLayout:
+    def test_fit_scales_and_pads(self):
+        fc = build_filter_complex([(0.0, 10.0)], None, [], fit=True, band_color="#123456")
+        assert "scale=1080:-2" in fc
+        assert "pad=1080:1920:0:(oh-ih)*0.42:color=0x123456" in fc
+        assert "crop=" not in fc
+
+    def test_crop_is_default(self):
+        fc = build_filter_complex([(0.0, 10.0)], None, [])
+        assert "crop=1080:1920" in fc
+        assert "pad=" not in fc
+
+    def test_band_color_arg(self):
+        assert band_color_arg("#101820") == "0x101820"
+        assert band_color_arg("bad") == "0x101820"
 
 
 class TestEscapeFilterPath:

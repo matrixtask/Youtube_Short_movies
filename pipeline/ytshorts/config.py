@@ -33,11 +33,14 @@ class Config:
     height: int = 1920
     fps: int = 30
     wide_enabled: bool = True  # 横型ソースのとき16:9ワイド版も生成（まとめ・ロング用）
+    shorts_layout: str = "fit"  # 横型ソースのショート化: fit=横幅フィット+上下帯 / crop=中央切り抜き
+    band_color: str = "#101820"  # fitレイアウトの帯の色
     # 字幕スタイル
     subtitle_font: str = "Noto Sans CJK JP"
     caption_color: str = "#FFFFFF"
     hook_color: str = "#FFE600"
     tsukkomi_color: str = "#FFD700"
+    title_color: str = "#FFFFFF"  # fitレイアウトの上帯タイトル
     # GAS連携（任意）
     gas_webapp_url: str = ""
     gas_admin_token: str = ""

@@ -26,12 +26,15 @@ width: 1080
 height: 1920
 fps: 30
 wide_enabled: true        # 横型ソースのとき16:9ワイド版も生成（まとめ・ロング用）
+shorts_layout: fit        # 横型→ショート: fit=横幅フィット+上下帯 / crop=中央切り抜き
+band_color: "#101820"     # fitレイアウトの帯の色
 
 # 字幕スタイル
 subtitle_font: "Noto Sans CJK JP"
 caption_color: "#FFFFFF"  # 本文字幕
 hook_color: "#FFE600"     # 冒頭フック
 tsukkomi_color: "#FFD700" # ツッコミ・ネタ字幕
+title_color: "#FFFFFF"    # 上帯の常時タイトル（fitのみ）
 
 # GAS撮影台本システムとの連携（任意。空なら台本なしで動く）
 gas_webapp_url: ""        # GASのWebアプリURL（gas/README.md参照）
