@@ -19,7 +19,7 @@ from pathlib import Path
 
 from . import compilation, cuts, gasapi, illustrations, planner, pull, render, slackup, subtitles, youtube
 from .config import CONFIG_FILENAME, Config, load_config
-from .transcribe import all_words, load_or_transcribe
+from .transcribe import all_words, load_or_transcribe, probe_dimensions
 
 VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".mkv", ".webm"}
 
@@ -112,9 +112,15 @@ def process_video(video: Path, cfg: Config, script: dict | None, force: bool) ->
             start = cuts.map_time(ill["time"], keep)
             ill_files.append((png, start, start + ill["duration"]))
 
+        style = {
+            "font": cfg.subtitle_font,
+            "caption_color": cfg.caption_color,
+            "hook_color": cfg.hook_color,
+            "tsukkomi_color": cfg.tsukkomi_color,
+        }
         subs_path = session_dir / f"{short['id']}.ass"
         subs_path.write_text(
-            subtitles.build_ass(short, keep, cfg.width, cfg.height), encoding="utf-8"
+            subtitles.build_ass(short, keep, cfg.width, cfg.height, **style), encoding="utf-8"
         )
 
         out_name = f"{video.stem}_{short['id']}_{slugify(short['title'])}.mp4"
@@ -122,8 +128,21 @@ def process_video(video: Path, cfg: Config, script: dict | None, force: bool) ->
         print("[4/4] レンダリング中…")
         render.render_short(video, keep, subs_path, ill_files, out_path, cfg)
 
+        # 横型ソースなら、まとめ動画・ロング動画用に16:9ワイド版も作る
+        wide_name = ""
+        if cfg.wide_enabled and is_landscape(video):
+            wide_name = f"{video.stem}_{short['id']}_wide.mp4"
+            wide_subs = session_dir / f"{short['id']}_wide.ass"
+            wide_subs.write_text(
+                subtitles.build_ass(short, keep, 1920, 1080, **style), encoding="utf-8"
+            )
+            print("      16:9ワイド版もレンダリング中…")
+            render.render_short(video, keep, wide_subs, ill_files,
+                                cfg.shorts_dir / wide_name, cfg, size=(1920, 1080))
+
         made.append({
             "file": out_name,
+            "wide_file": wide_name,
             "session": video.stem,
             "short_id": short["id"],
             "title": short["title"],
@@ -132,6 +151,14 @@ def process_video(video: Path, cfg: Config, script: dict | None, force: bool) ->
             "created_at": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
         })
     return made
+
+
+def is_landscape(video: Path) -> bool:
+    try:
+        w, h = probe_dimensions(video)
+        return w > h
+    except Exception:
+        return False
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -209,24 +236,29 @@ def share_shorts_to_slack(cfg: Config, token: str, channel: str, video: dict, ma
         return 0
     shared = 0
     for m in made:
-        fpath = cfg.shorts_dir / m["file"]
-        try:
-            info = slackup.upload_to_slack(
-                token, channel, video.get("thread_ts") or None, fpath,
-                title=f"{m['title']}（{m['score']}点）",
-            )
-            gasapi.register_short(cfg, {
-                "video_id": video.get("video_id", ""),
-                "script_id": video.get("script_id", ""),
-                "title": m["title"],
-                "score": m["score"],
-                "duration": m["duration"],
-                "slack_file_id": info["id"],
-                "url_private": info["url_private"],
-            })
-            shared += 1
-        except Exception as e:
-            print(f"⚠ Slackへのアップロード失敗 ({m['file']}): {e}", file=sys.stderr)
+        uploads = [(m["file"], "short", f"{m['title']}（{m['score']}点）")]
+        if m.get("wide_file"):
+            uploads.append((m["wide_file"], "wide", f"{m['title']}（16:9ワイド版・まとめ用）"))
+        for fname, kind, title in uploads:
+            try:
+                info = slackup.upload_to_slack(
+                    token, channel, video.get("thread_ts") or None, cfg.shorts_dir / fname,
+                    title=title,
+                )
+                gasapi.register_short(cfg, {
+                    "video_id": video.get("video_id", ""),
+                    "script_id": video.get("script_id", ""),
+                    "title": m["title"],
+                    "score": m["score"],
+                    "duration": m["duration"],
+                    "slack_file_id": info["id"],
+                    "url_private": info["url_private"],
+                    "kind": kind,
+                })
+                if kind == "short":
+                    shared += 1
+            except Exception as e:
+                print(f"⚠ Slackへのアップロード失敗 ({fname}): {e}", file=sys.stderr)
     return shared
 
 
@@ -254,15 +286,16 @@ def cmd_pull(args: argparse.Namespace) -> int:
 
 
 def collect_slack_shorts(cfg: Config, min_score: int) -> tuple[list[dict], Path, str]:
-    """GASの台帳からショートを集め、Slackからダウンロードして材料にする。"""
+    """GASの台帳からショートを集め、Slackからダウンロードして材料にする。
+
+    縦と横の両方があるショートは横（wide）を優先する。
+    """
     ledger = gasapi.fetch_shorts(cfg)
     token = pull.slack_token()
     cache = cfg.workspace / "cache"
     cache.mkdir(parents=True, exist_ok=True)
     entries = []
-    for s in ledger["shorts"]:
-        if s["score"] < min_score or not s["url_private"]:
-            continue
+    for s in compilation.select_compile_entries(ledger["shorts"], min_score):
         fname = f"{s['short_id']}.mp4"
         dest = cache / fname
         if not dest.exists():
@@ -284,8 +317,16 @@ def cmd_compile(args: argparse.Namespace) -> int:
     if args.from_slack:
         entries, src_dir, channel = collect_slack_shorts(cfg, args.min_score)
     else:
-        entries = [e for e in load_index(cfg) if e["score"] >= args.min_score]
-        entries = [e for e in entries if (cfg.shorts_dir / e["file"]).exists()]
+        entries = []
+        for e in load_index(cfg):
+            if e["score"] < args.min_score:
+                continue
+            # ワイド版があればまとめにはそちらを使う
+            fname = e.get("wide_file") or e["file"]
+            if not (cfg.shorts_dir / fname).exists():
+                fname = e["file"]
+            if (cfg.shorts_dir / fname).exists():
+                entries.append(dict(e, file=fname))
         src_dir = cfg.shorts_dir
     if not entries:
         print("まとめられるショートがありません。先にショートをストックしてください。")

@@ -36,6 +36,23 @@ def build_compilation_filter(
     return ";".join(parts)
 
 
+def select_compile_entries(shorts: list[dict], min_score: int) -> list[dict]:
+    """まとめ動画の材料を選ぶ（純粋）。
+
+    同じ動画・同じタイトルで縦(short)と横(wide)の両方があるときは
+    wide を優先する（まとめ動画は16:9のため）。
+    """
+    groups: dict = {}
+    for s in shorts:
+        if s.get("score", 0) < min_score or not s.get("url_private"):
+            continue
+        key = (s.get("video_id", ""), s.get("title", ""))
+        current = groups.get(key)
+        if current is None or (s.get("kind") == "wide" and current.get("kind") != "wide"):
+            groups[key] = s
+    return list(groups.values())
+
+
 def format_chapter_time(seconds: float) -> str:
     m, s = divmod(int(seconds), 60)
     h, m = divmod(m, 60)

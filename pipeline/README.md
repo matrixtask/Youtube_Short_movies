@@ -104,6 +104,14 @@ Slackのファイル上限は1ファイル1GBです。4Kで長回しして超え
 
 - ショートは `workspace/shorts/` に、まとめ動画は `workspace/compilations/`
   に出力されます（概要欄用のチャプターリスト付き）
+- **横型（16:9）で撮った場合**: ショートは中央を9:16に切り抜くので、
+  顔・被写体を画面中央に置いて撮ってください。同時に16:9の
+  ワイド版も生成され（`wide_enabled`）、まとめ動画はワイド版を優先して
+  使うため横型ネイティブの長尺になります
+- 編集の口調・テイストは `config.yaml` の `channel_concept` / `style_notes`、
+  字幕の見た目は `subtitle_font` / `caption_color` 等で調整できます。
+  `pipeline/config.yaml` は秘密情報を含まないので**コミットしてOK** —
+  コミットするとクラウド実行（Actions）にも同じテイストが反映されます
 - 中間生成物（文字起こし・プラン・挿絵・字幕）は `workspace/sessions/<動画名>/`
   に残るので、`plan.json` を手で直して `ytshorts run` し直すこともできます
 

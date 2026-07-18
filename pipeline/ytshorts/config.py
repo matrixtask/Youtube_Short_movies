@@ -25,10 +25,19 @@ class Config:
     short_min_sec: float = 15.0
     short_max_sec: float = 59.0
     quality_threshold: int = 70  # このスコア未満のショートはレンダリングしない
+    # チャンネル・テイスト
+    channel_concept: str = "中井佑の、とにかく早く移動したい！"
+    style_notes: str = ""  # 編集テイストの指示（字幕の口調・ツッコミの温度感など）
     # 出力
     width: int = 1080
     height: int = 1920
     fps: int = 30
+    wide_enabled: bool = True  # 横型ソースのとき16:9ワイド版も生成（まとめ・ロング用）
+    # 字幕スタイル
+    subtitle_font: str = "Noto Sans CJK JP"
+    caption_color: str = "#FFFFFF"
+    hook_color: str = "#FFE600"
+    tsukkomi_color: str = "#FFD700"
     # GAS連携（任意）
     gas_webapp_url: str = ""
     gas_admin_token: str = ""

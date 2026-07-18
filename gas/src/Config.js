@@ -9,6 +9,7 @@
  *   ADMIN_TOKEN         ローカル編集パイプライン連携用の長いランダム文字列
  *
  * 任意:
+ *   CHANNEL_CONCEPT     チャンネルコンセプト（台本生成の文脈に使う）
  *   CLAUDE_MODEL        既定: claude-sonnet-5
  *   SHOOT_QUESTIONS     1回の台本の質問数（既定: 5）
  *   SHOOT_DAYS          台本を届ける曜日 "MON,WED,FRI" など（既定: 毎日）

@@ -71,9 +71,20 @@ def build_planner_prompt(transcript: dict, cfg: Config, script_questions: list[d
     return "\n".join(parts)
 
 
+def build_planner_system(cfg: Config) -> str:
+    system = PLANNER_SYSTEM
+    system += (
+        f"\n\nこの動画はYouTubeチャンネル「{cfg.channel_concept}」のコンテンツです。"
+        "タイトル・フック・ツッコミ・挿絵はチャンネルの文脈とトーンに合わせること。"
+    )
+    if cfg.style_notes:
+        system += "\n\n編集テイストの指示（必ず従う）:\n" + cfg.style_notes
+    return system
+
+
 def generate_plan(transcript: dict, cfg: Config, script_questions: list[dict] | None = None) -> dict:
     raw = ask_claude_json(
-        PLANNER_SYSTEM,
+        build_planner_system(cfg),
         build_planner_prompt(transcript, cfg, script_questions),
         max_tokens=16000,
         model=cfg.claude_model,

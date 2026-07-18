@@ -142,6 +142,7 @@ function markVideoDone(videoId, ok, summary) {
 /** 生成済みショートを台帳に登録し、承認依頼をSlackへ出す（パイプラインから呼ばれる） */
 function registerShort(payload) {
   var shortId = newId('sh');
+  var kind = String(payload.kind || 'short'); // 'wide' = 16:9版（まとめ・ロング用素材）
   appendRowObj(SHEET.SHORTS, {
     short_id: shortId,
     created_at: fmtDateTime(nowJst()),
@@ -152,18 +153,21 @@ function registerShort(payload) {
     duration: String(payload.duration || ''),
     slack_file_id: String(payload.slack_file_id || ''),
     url_private: String(payload.url_private || ''),
-    status: isAutoApprove() ? SHORT_STATUS.APPROVED : SHORT_STATUS.STOCK,
+    status: kind === 'wide' ? SHORT_STATUS.STOCK : (isAutoApprove() ? SHORT_STATUS.APPROVED : SHORT_STATUS.STOCK),
     scheduled_at: '',
     youtube_url: '',
     published_at: '',
+    kind: kind,
   });
-  // 承認依頼は動画が届いたスレッドに出す
-  var threadTs = '';
-  var videos = readTable(SHEET.VIDEOS).filter(function (r) {
-    return String(r.video_id) === String(payload.video_id || '');
-  });
-  if (videos.length) threadTs = rawSlackTs(videos[videos.length - 1].thread_ts);
-  promptApproval(shortId, String(payload.title || ''), Number(payload.score) || 0, threadTs);
+  // 承認依頼（YouTubeショート投稿）は縦版のみ。ワイド版はまとめ用の素材
+  if (kind !== 'wide') {
+    var threadTs = '';
+    var videos = readTable(SHEET.VIDEOS).filter(function (r) {
+      return String(r.video_id) === String(payload.video_id || '');
+    });
+    if (videos.length) threadTs = rawSlackTs(videos[videos.length - 1].thread_ts);
+    promptApproval(shortId, String(payload.title || ''), Number(payload.score) || 0, threadTs);
+  }
   return true;
 }
 
@@ -181,6 +185,7 @@ function listShorts() {
       slack_file_id: String(r.slack_file_id || ''),
       url_private: String(r.url_private || ''),
       status: String(r.status || 'stock'),
+      kind: String(r.kind || 'short'),
     };
   });
 }

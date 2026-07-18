@@ -1,4 +1,37 @@
-from ytshorts.subtitles import HOOK_DURATION, ass_escape, build_ass, build_events, format_ass_time
+from ytshorts.subtitles import (
+    HOOK_DURATION,
+    ass_color,
+    ass_escape,
+    build_ass,
+    build_ass_header,
+    build_events,
+    format_ass_time,
+)
+
+
+class TestAssColor:
+    def test_white(self):
+        assert ass_color("#FFFFFF") == "&H00FFFFFF"
+
+    def test_rgb_to_bgr(self):
+        # ASSは &H00BBGGRR 形式
+        assert ass_color("#FFE600") == "&H0000E6FF"
+
+    def test_invalid_falls_back_to_white(self):
+        assert ass_color("red") == "&H00FFFFFF"
+
+
+class TestBuildAssHeader:
+    def test_landscape_scales_margins(self):
+        header = build_ass_header(1920, 1080)
+        assert "PlayResX: 1920" in header
+        assert "PlayResY: 1080" in header
+        assert f",{round(1080 * 0.177)},1" in header  # Captionの下余白が高さに追従
+
+    def test_custom_style(self):
+        header = build_ass_header(1080, 1920, font="Rounded Mplus", caption_color="#00FF00")
+        assert "Rounded Mplus" in header
+        assert "&H0000FF00" in header
 
 
 class TestFormatAssTime:

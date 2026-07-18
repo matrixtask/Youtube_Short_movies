@@ -17,10 +17,21 @@ short_min_sec: 15
 short_max_sec: 59
 quality_threshold: 70     # このスコア未満のショートはレンダリングしない
 
+# チャンネル・編集テイスト
+channel_concept: "中井佑の、とにかく早く移動したい！"
+style_notes: ""           # 編集テイストの指示（例: ツッコミは関西弁で辛口に、など）
+
 # 出力
 width: 1080
 height: 1920
 fps: 30
+wide_enabled: true        # 横型ソースのとき16:9ワイド版も生成（まとめ・ロング用）
+
+# 字幕スタイル
+subtitle_font: "Noto Sans CJK JP"
+caption_color: "#FFFFFF"  # 本文字幕
+hook_color: "#FFE600"     # 冒頭フック
+tsukkomi_color: "#FFD700" # ツッコミ・ネタ字幕
 
 # GAS撮影台本システムとの連携（任意。空なら台本なしで動く）
 gas_webapp_url: ""        # GASのWebアプリURL（gas/README.md参照）

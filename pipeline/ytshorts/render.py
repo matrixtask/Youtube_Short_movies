@@ -71,8 +71,10 @@ def build_short_command(
     illustration_files: list[tuple[Path, float, float]],
     out_path: Path,
     cfg: Config,
+    size: tuple[int, int] | None = None,
 ) -> list[str]:
-    """ffmpeg コマンド全体を組み立てる（純粋）。"""
+    """ffmpeg コマンド全体を組み立てる（純粋）。size で出力解像度を上書きできる。"""
+    width, height = size or (cfg.width, cfg.height)
     cmd = ["ffmpeg", "-y", "-i", str(video)]
     specs: list[tuple[int, float, float]] = []
     for i, (png, start, end) in enumerate(illustration_files):
@@ -82,8 +84,8 @@ def build_short_command(
         keep,
         str(subs_path) if subs_path else None,
         specs,
-        cfg.width,
-        cfg.height,
+        width,
+        height,
         cfg.fps,
     )
     cmd += [
@@ -104,8 +106,9 @@ def render_short(
     illustration_files: list[tuple[Path, float, float]],
     out_path: Path,
     cfg: Config,
+    size: tuple[int, int] | None = None,
 ) -> None:
-    cmd = build_short_command(video, keep, subs_path, illustration_files, out_path, cfg)
+    cmd = build_short_command(video, keep, subs_path, illustration_files, out_path, cfg, size)
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
         raise RuntimeError(f"ffmpeg failed:\n{proc.stderr[-2000:]}")

@@ -27,7 +27,7 @@ function handleApprovalCommand(text) {
   var isApprove = /承認|approve/i.test(m[1]);
   var target = m[2];
   var stock = readTable(SHEET.SHORTS).filter(function (r) {
-    return String(r.status) === SHORT_STATUS.STOCK;
+    return String(r.status) === SHORT_STATUS.STOCK && String(r.kind || 'short') !== 'wide';
   });
 
   var targets;
@@ -113,6 +113,7 @@ function listPublishQueue() {
   return readTable(SHEET.SHORTS)
     .filter(function (r) {
       return String(r.status) === SHORT_STATUS.SCHEDULED &&
+        String(r.kind || 'short') !== 'wide' &&
         String(r.scheduled_at) && String(r.scheduled_at) <= nowStr &&
         String(r.url_private);
     })

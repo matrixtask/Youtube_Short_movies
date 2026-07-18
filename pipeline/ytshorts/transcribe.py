@@ -9,6 +9,25 @@ from pathlib import Path
 from .config import Config
 
 
+def probe_dimensions(video: Path) -> tuple[int, int]:
+    """表示上の幅・高さを返す（スマホ動画の回転メタデータも考慮）。"""
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0",
+         "-show_entries", "stream=width,height:stream_side_data=rotation",
+         "-of", "json", str(video)],
+        capture_output=True, text=True, check=True,
+    )
+    stream = json.loads(out.stdout)["streams"][0]
+    w, h = int(stream["width"]), int(stream["height"])
+    rotation = 0
+    for sd in stream.get("side_data_list") or []:
+        if "rotation" in sd:
+            rotation = int(sd["rotation"])
+    if abs(rotation) % 180 == 90:
+        w, h = h, w
+    return w, h
+
+
 def probe_duration(video: Path) -> float:
     out = subprocess.run(
         ["ffprobe", "-v", "error", "-show_entries", "format=duration",

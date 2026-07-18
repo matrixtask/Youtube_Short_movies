@@ -10,7 +10,8 @@ __pycache__/
 
 # パイプラインの作業ディレクトリ（動画・生成物はコミットしない）
 workspace/
-pipeline/config.yaml
+# 注: pipeline/config.yaml は秘密情報を含まない設定なのでコミットしてよい
+#     （コミットするとクラウド実行(Actions)にもテイスト設定が反映される）
 *.mp4
 *.mov
 *.MOV

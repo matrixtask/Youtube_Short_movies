@@ -91,8 +91,10 @@ function startShootScript(kind, title) {
 }
 
 function generateShootQuestions(themes, count, recentNotes) {
+  var concept = getProp('CHANNEL_CONCEPT', '中井佑の、とにかく早く移動したい！');
   var system = [
-    'あなたは経営者のYouTubeショート用に、カメラの前で答えてもらう質問を作る放送作家です。',
+    'あなたはYouTubeチャンネル「' + concept + '」の放送作家です。',
+    'チャンネルの文脈に合う、カメラの前で答えてもらう質問を作ります。',
     '視聴者が最後まで見てしまう「1問=1ショート」の質問を作ります。',
     '質問のルール:',
     '- 1問1トピック、話し言葉で短く（40字以内目安）',
