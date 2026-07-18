@@ -126,12 +126,22 @@ def clasp_setup() -> str:
         print(f"  clasp push に失敗: {r.stderr.strip()[:200]}")
         return ""
     print("  コードを反映しました。Webアプリをデプロイします…")
-    r = run(["clasp", "deploy", "--description", "setup"], cwd=GAS_DIR)
-    m = re.search(r"-\s+(\S+)\s+@", r.stdout)
-    if r.returncode != 0 or not m:
-        print(f"  clasp deploy に失敗: {(r.stderr or r.stdout).strip()[:200]}")
-        return ""
-    url = f"https://script.google.com/macros/s/{m.group(1)}/exec"
+
+    # 既にデプロイ済みならURLが変わらないよう同じデプロイを更新する
+    r = run(["clasp", "deployments"], cwd=GAS_DIR)
+    existing = re.findall(r"(AKfycb[\w-]+)\s+@\d+", r.stdout + r.stderr)
+    if existing:
+        dep_id = existing[0]
+        run(["clasp", "deploy", "-i", dep_id, "--description", "setup"], cwd=GAS_DIR)
+    else:
+        r = run(["clasp", "deploy", "--description", "setup"], cwd=GAS_DIR)
+        # claspのバージョンで出力形式が違う: "- <ID> @1" / "Deployed <ID> @1"
+        m = re.search(r"(AKfycb[\w-]+)", r.stdout + r.stderr)
+        if not m:
+            print(f"  clasp deploy に失敗: {(r.stderr or r.stdout).strip()[:200]}")
+            return ""
+        dep_id = m.group(1)
+    url = f"https://script.google.com/macros/s/{dep_id}/exec"
     print(f"  WebアプリURL: {url}")
     return url
 
