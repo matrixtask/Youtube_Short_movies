@@ -16,6 +16,8 @@
  *   SHOOT_HOUR          台本を届ける時刻（既定: 8）
  *   GITHUB_REPO         クラウド実行用 "owner/repo"（GitHub Actionsを即時起動）
  *   GITHUB_TOKEN        repository_dispatch を送れる fine-grained PAT
+ *   NOTION_TOKEN        Notionインテグレーションのシークレット（Wiki同期用）
+ *   NOTION_PARENT_PAGE_ID  データベースを作るWikiページのID
  *
  * YouTube自動投稿:
  *   AUTO_APPROVE        "true" で承認なしに自動で投稿枠へ（既定: false）

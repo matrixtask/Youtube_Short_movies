@@ -86,6 +86,20 @@ manifest」に貼れば、スコープ・イベント購読込みで一発で作
 動画の実処理はGitHub Actions（クラウド）またはローカルPCの
 `ytshorts pull --watch` が行います。[../pipeline/README.md](../pipeline/README.md) を参照。
 
+## Notion連携（任意）
+
+トークテーマとショート台帳をNotionのWikiに同期できます（毎晩22時台+手動）:
+
+1. [notion.so/my-integrations](https://www.notion.so/my-integrations) でインテグレーションを作成し、
+   シークレットをスクリプトプロパティ `NOTION_TOKEN` に設定
+2. Wikiにする親ページの右上「…」→「コネクト」でインテグレーションを追加
+3. ページURL末尾の32桁IDを `NOTION_PARENT_PAGE_ID` に設定
+4. GASエディタで `setupNotionDatabases()` を実行 →
+   「トークテーマ」「ショート台帳」のデータベースが自動作成される
+5. `installTriggers()` を再実行（毎晩の同期トリガーが追加される）
+
+同期はシート→Notionの一方向です。テーマの編集はThemesシートで。
+
 ## Themesシート
 
 質問のテーマプールです。`theme / category (evergreen|news|neta) / weight /
