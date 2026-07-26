@@ -26,7 +26,10 @@ function handleVideoUpload(event) {
   var files = (event.files || []).filter(isVideoFile);
   if (!files.length) return false;
   var threadTs = event.thread_ts || event.ts;
-  var script = findScriptForVideo(event.thread_ts);
+  // 「フリートーク」等を添えて投稿された動画は台本と紐づけない
+  // （編集プランに無関係な質問リストが渡るのを防ぐ。話のまとまりだけで切り出される）
+  var isFreeTalk = /フリートーク|雑談|freetalk|free talk/i.test(String(event.text || ''));
+  var script = isFreeTalk ? null : findScriptForVideo(event.thread_ts);
   var existing = readTable(SHEET.VIDEOS);
   var added = 0;
 
