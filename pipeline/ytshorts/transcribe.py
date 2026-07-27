@@ -37,6 +37,24 @@ def probe_duration(video: Path) -> float:
     return float(out.stdout.strip())
 
 
+def resolve_device(preference: str) -> tuple[str, str]:
+    """使用デバイスと計算精度を決める（純粋）。
+
+    faster-whisper の実体は CTranslate2 なので、torch の有無ではなく
+    CTranslate2 が見ているCUDAデバイス数で判定する
+    （torchは依存に含まれないため、torchで判定するとGPU機でもCPUになる）。
+    """
+    if preference and preference != "auto":
+        return preference, ("int8" if preference == "cpu" else "float16")
+    try:
+        import ctranslate2
+        if ctranslate2.get_cuda_device_count() > 0:
+            return "cuda", "float16"
+    except Exception:
+        pass
+    return "cpu", "int8"
+
+
 def transcribe(video: Path, cfg: Config) -> dict:
     """動画を文字起こしして {duration, language, segments} を返す。
 
@@ -49,18 +67,17 @@ def transcribe(video: Path, cfg: Config) -> dict:
             "faster-whisper が見つかりません。`pip install faster-whisper` を実行してください"
         ) from e
 
-    device = cfg.whisper_device
-    compute = "auto"
-    if device == "auto":
-        try:
-            import torch  # noqa: F401
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-        except ImportError:
-            device = "cpu"
-    if device == "cpu":
-        compute = "int8"
-
-    model = WhisperModel(cfg.whisper_model, device=device, compute_type=compute)
+    device, compute = resolve_device(cfg.whisper_device)
+    print(f"      デバイス: {device} ({compute}) / モデル: {cfg.whisper_model}")
+    try:
+        model = WhisperModel(cfg.whisper_model, device=device, compute_type=compute)
+    except Exception as e:
+        # cuDNN/cuBLAS が無い等でCUDA初期化に失敗しても処理は続ける
+        if device != "cuda":
+            raise
+        print(f"      ⚠ GPUを使えませんでした（{e}）。CPUで続行します")
+        device, compute = "cpu", "int8"
+        model = WhisperModel(cfg.whisper_model, device=device, compute_type=compute)
     segments, info = model.transcribe(
         str(video),
         language=cfg.language,

@@ -6,7 +6,7 @@
  *   毎週月 9時台         weeklyDigest          … 未撮影・未処理の台本をリマインド
  */
 
-var TRIGGER_FUNCS = ['startDailyShootScript', 'weeklyDigest', 'youtubeTick', 'nightlyNotionSync'];
+var TRIGGER_FUNCS = ['startDailyShootScript', 'weeklyDigest', 'youtubeTick', 'nightlyNotionSync', 'remindPendingVideos'];
 
 function installTriggers() {
   deleteManagedTriggers();
@@ -15,6 +15,7 @@ function installTriggers() {
   ScriptApp.newTrigger('weeklyDigest').timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(9).create();
   ScriptApp.newTrigger('youtubeTick').timeBased().everyHours(1).create();
   ScriptApp.newTrigger('nightlyNotionSync').timeBased().atHour(22).everyDays(1).create();
+  ScriptApp.newTrigger('remindPendingVideos').timeBased().everyMinutes(30).create();
   logEvent('triggers', 'トリガーを登録しました');
   return 'OK';
 }

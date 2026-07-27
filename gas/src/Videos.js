@@ -87,6 +87,42 @@ function findScriptForVideo(threadTs) {
   return candidates.length ? candidates[candidates.length - 1] : null;
 }
 
+/**
+ * 未処理の動画が残っていることをSlackで知らせる（毎時のトリガーから呼ばれる）。
+ * GPU機での手動処理（make pull）を忘れないためのリマインド。
+ * 同じ内容を何度も送らないよう、前回通知した内容を記録して変化時のみ送る。
+ */
+function remindPendingVideos() {
+  if (String(getProp('PENDING_REMINDER', 'true')).toLowerCase() !== 'true') return;
+  var pending = readTable(SHEET.VIDEOS).filter(function (r) {
+    return String(r.status) === VIDEO_STATUS.PENDING;
+  });
+
+  var cache = CacheService.getScriptCache();
+  var key = 'pending_reminded';
+  if (!pending.length) {
+    cache.remove(key); // 片付いたら次に溜まったとき即通知できるようにする
+    return;
+  }
+
+  // 直後の通知は不要（クラウドや常駐pullが数分で片付ける場合がある）
+  var oldest = pending[0];
+  var waitedMin = (nowJst().getTime() - new Date(String(oldest.created_at)).getTime()) / 60000;
+  if (!(waitedMin >= Number(getProp('PENDING_REMIND_AFTER_MIN', '20')))) return;
+
+  var signature = pending.map(function (r) { return r.video_id; }).sort().join(',');
+  if (cache.get(key) === signature) return; // 同じ顔ぶれには再通知しない
+  cache.put(key, signature, 21600); // 6時間
+
+  notifySlack([
+    ':desktop_computer: 未処理の動画が' + pending.length + '本あります（最古 ' + Math.round(waitedMin) + '分待ち）',
+    pending.map(function (r) { return '• ' + r.file_name; }).join('\n'),
+    '',
+    'GPU機で処理する場合: `make pull`',
+  ].join('\n'));
+  logEvent('pending_reminder', pending.length + '本');
+}
+
 /** 処理待ちの動画を、紐づく台本の質問ごと返す（パイプラインが取得する） */
 function listPendingVideos() {
   var questions = readTable(SHEET.QUESTIONS);

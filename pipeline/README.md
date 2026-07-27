@@ -80,6 +80,21 @@ ytshorts pull                     # 新着を1回だけ取り込んで処理
 ytshorts pull --watch             # 常駐（5分間隔で監視、Ctrl+Cで終了）
 ```
 
+### GPUで高速化する
+
+GPUは自動検出されます（CTranslate2が見えるCUDAデバイスで判定）。実行時に
+`デバイス: cuda (float16)` と表示されればGPUで動いています。`cpu (int8)` なら
+CPU実行です。GPUを使うには **NVIDIAドライバに加えて cuBLAS と cuDNN 9** が必要で、
+入っていない場合は自動的にCPUへフォールバックします（警告が出ます）。
+
+```bash
+# GPU用ライブラリ（venv内に入れるのが簡単）
+pipeline/.venv/bin/pip install nvidia-cublas-cu12 nvidia-cudnn-cu12
+
+# GPUがあるなら精度の高いモデルに上げる価値があります（.env）
+YTSHORTS_WHISPER_MODEL=large-v3
+```
+
 ### 手動モード（GASなしでも動く）
 
 ```bash
