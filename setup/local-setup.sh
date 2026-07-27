@@ -3,11 +3,13 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-echo "=== 1/4 システム依存（ffmpeg・日本語フォント・SVG変換） ==="
+echo "=== 1/4 システム依存（ffmpeg・日本語フォント・SVG変換・venv） ==="
 missing=()
 command -v ffmpeg >/dev/null || missing+=(ffmpeg)
 command -v rsvg-convert >/dev/null || missing+=(librsvg2-bin)
 fc-list 2>/dev/null | grep -qi "Noto Sans CJK" || missing+=(fonts-noto-cjk)
+# Debian/Ubuntuでは venv が別パッケージなので、python3 -m venv の可否で判定する
+python3 -c "import venv, ensurepip" 2>/dev/null || missing+=("python3-venv" python3-pip)
 if [ ${#missing[@]} -gt 0 ]; then
   echo "  インストールします: ${missing[*]}（sudoパスワードを聞かれることがあります）"
   sudo apt-get update -qq && sudo apt-get install -y "${missing[@]}"
@@ -16,6 +18,8 @@ else
 fi
 
 echo "=== 2/4 Python環境（pipeline/.venv） ==="
+# 前回失敗して壊れたvenvが残っていると作り直せないため、一度消す
+[ -x pipeline/.venv/bin/python3 ] || rm -rf pipeline/.venv
 python3 -m venv pipeline/.venv
 pipeline/.venv/bin/pip install -q -U pip
 pipeline/.venv/bin/pip install -q -e ./pipeline pytest
