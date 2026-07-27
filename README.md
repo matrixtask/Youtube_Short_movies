@@ -72,6 +72,19 @@ npm i -g @google/clasp && clasp login   # GAS自動デプロイ用（任意だ�
 python3 setup/setup.py
 ```
 
+## ローカルでの操作（make）
+
+```bash
+make setup       # ローカル実行環境の一発構築（ffmpeg・venv・.env雛形）
+# .env にAPIキー類を記入したら:
+make pull        # Slackの新着動画を取り込んで処理
+make gas-deploy  # GASのコード反映+再デプロイ（URL不変）
+make help        # 全コマンド一覧
+```
+
+クラウド（GitHub Actions）とローカルは同じコードで動くので、
+急ぎの処理やデバッグはローカル、普段は放置でクラウド、と使い分けられます。
+
 ウィザードが、ADMIN_TOKENの生成 / YouTubeのOAuth承認（ブラウザが開くだけ）/
 GASプロジェクトの作成とデプロイ / Slackアプリのマニフェスト生成 /
 GitHub Secretsの登録までやります。残る手作業は
