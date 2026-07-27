@@ -1,7 +1,7 @@
 # YouTube Shorts Studio — ローカル操作コマンド集
 #
 #   make setup        ローカル環境の一発構築（venv・依存・.env雛形）
-#   make env-pull     GASのスクリプトプロパティから .env を取得（要ALLOW_ENV_EXPORT）
+#   make env-pull     .env を一括生成・検証（既存/ウィザード出力/GASから集める）
 #   make gas-push     GASへコードを反映（clasp push）
 #   make gas-deploy   GASへ反映 + Webアプリを再デプロイ（URLは変わらない）
 #   make gas-open     GASエディタをブラウザで開く
