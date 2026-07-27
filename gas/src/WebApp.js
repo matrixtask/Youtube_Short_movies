@@ -119,6 +119,19 @@ function doPost(e) {
     return ContentService.createTextOutput(payload.challenge);
   }
 
+  // 処理待ち動画の「確保」（二重処理を防ぐためPOSTで状態を変える）
+  // 例: POST {"action":"claim_videos","token":"...","worker":"gpu-pc"}
+  if (payload.action === 'claim_videos') {
+    if (!payload.token || payload.token !== getProp('ADMIN_TOKEN')) {
+      return ContentService.createTextOutput(JSON.stringify({ ok: false, error: 'unauthorized' }));
+    }
+    return ContentService.createTextOutput(JSON.stringify({
+      ok: true,
+      channel: String(getProp('SLACK_CHANNEL_ID') || ''),
+      videos: claimPendingVideos(payload.worker),
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+
   // 生成済みショートの台帳登録
   // 例: POST {"action":"short_created","token":"...","video_id":"...","title":"...",
   //           "score":85,"duration":42,"slack_file_id":"F...","url_private":"https://..."}

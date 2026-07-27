@@ -62,8 +62,11 @@ def fetch_latest_script(cfg: Config) -> dict | None:
     return (shot or scripts)[-1]
 
 
-def fetch_pending_videos(cfg: Config) -> dict:
-    """Slackに投げられて処理待ちの動画一覧を取得する。
+def claim_pending_videos(cfg: Config, worker: str) -> dict:
+    """処理待ちの動画を「確保」して取得する（他のワーカーは拾えなくなる）。
+
+    ローカルのGPU機とGitHub Actionsが同時に動いても二重処理にならないよう、
+    GAS側で processing に落としてから返してもらう。
 
     戻り値: {"channel": 通知先チャンネルID, "videos": [...]}
     各動画: {video_id, script_id, thread_ts, file_id, file_name, url_private, size, questions}
@@ -72,8 +75,22 @@ def fetch_pending_videos(cfg: Config) -> dict:
     if not cfg.gas_webapp_url or not cfg.gas_admin_token:
         print("⚠ gas_webapp_url / GAS_ADMIN_TOKEN が未設定です", file=sys.stderr)
         return empty
-    data = _get_json(cfg, "videos")
-    if data is None:
+    payload = json.dumps({
+        "action": "claim_videos",
+        "token": cfg.gas_admin_token,
+        "worker": worker,
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        cfg.gas_webapp_url, data=payload, headers={"content-type": "application/json"}
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as res:
+            data = json.loads(res.read().decode("utf-8"))
+    except Exception as e:
+        print(f"⚠ GASから動画を取得できません: {e}", file=sys.stderr)
+        return empty
+    if not data.get("ok"):
+        print(f"⚠ GASがエラーを返しました: {data.get('error')}", file=sys.stderr)
         return empty
     return {"channel": data.get("channel", ""), "videos": data.get("videos") or []}
 

@@ -13,6 +13,7 @@ import argparse
 import datetime as dt
 import json
 import re
+import socket
 import sys
 import time
 from pathlib import Path
@@ -202,9 +203,21 @@ def cmd_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def worker_name() -> str:
+    """どのマシンが処理したかをGASの台帳に残すための識別子。"""
+    import os
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        return "github-actions"
+    return f"{socket.gethostname()}/local"
+
+
 def pull_once(cfg: Config) -> int:
-    """Slackに投げられた処理待ち動画を取り込んで処理する。処理した本数を返す。"""
-    pending = gasapi.fetch_pending_videos(cfg)
+    """Slackに投げられた処理待ち動画を取り込んで処理する。処理した本数を返す。
+
+    動画はGAS側で「確保」してから取得するので、クラウド実行と同時に走っても
+    同じ動画を二重処理しない。
+    """
+    pending = gasapi.claim_pending_videos(cfg, worker_name())
     videos = pending["videos"]
     if not videos:
         return 0

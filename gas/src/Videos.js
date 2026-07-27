@@ -10,7 +10,12 @@
  *   4. markVideoDone() が結果を元のスレッドに返す
  */
 
-var VIDEO_STATUS = { PENDING: 'pending', DONE: 'done', FAILED: 'failed' };
+var VIDEO_STATUS = {
+  PENDING: 'pending',
+  PROCESSING: 'processing', // どこかのワーカーが処理中（二重処理を防ぐ）
+  DONE: 'done',
+  FAILED: 'failed',
+};
 
 var VIDEO_EXTS = ['.mp4', '.mov', '.m4v', '.mkv', '.webm'];
 
@@ -93,6 +98,7 @@ function findScriptForVideo(threadTs) {
  * 同じ内容を何度も送らないよう、前回通知した内容を記録して変化時のみ送る。
  */
 function remindPendingVideos() {
+  releaseStaleClaims(); // 落ちたワーカーの後始末もここで
   if (String(getProp('PENDING_REMINDER', 'true')).toLowerCase() !== 'true') return;
   var pending = readTable(SHEET.VIDEOS).filter(function (r) {
     return String(r.status) === VIDEO_STATUS.PENDING;
@@ -123,7 +129,63 @@ function remindPendingVideos() {
   logEvent('pending_reminder', pending.length + '本');
 }
 
-/** 処理待ちの動画を、紐づく台本の質問ごと返す（パイプラインが取得する） */
+/**
+ * 処理待ちの動画を「確保」して返す（二重処理の防止）。
+ *
+ * ローカルのGPU機とGitHub Actionsが同時に走っても、同じ動画を両方が
+ * 処理しないよう、取得と同時に processing へ落とす。スクリプトロックで
+ * 直列化しているため、同時アクセスでも片方だけが確保できる。
+ */
+function claimPendingVideos(worker) {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) {
+    logEvent('claim_busy', '他のワーカーが取得中');
+    return [];
+  }
+  try {
+    releaseStaleClaims();
+    var claimed = listPendingVideos();
+    var now = fmtDateTime(nowJst());
+    claimed.forEach(function (v) {
+      updateRowsWhere(SHEET.VIDEOS, 'video_id', v.video_id, {
+        status: VIDEO_STATUS.PROCESSING,
+        claimed_at: now,
+        claimed_by: String(worker || 'unknown').slice(0, 60),
+      });
+    });
+    if (claimed.length) {
+      logEvent('claim', claimed.length + '本 by ' + (worker || 'unknown'));
+    }
+    return claimed;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * 処理中のまま放置された動画をpendingへ戻す。
+ * ワーカーが落ちた・ネットワークが切れた場合の救済。
+ */
+function releaseStaleClaims() {
+  var limitMin = Number(getProp('CLAIM_TIMEOUT_MIN', '90'));
+  var now = nowJst().getTime();
+  var released = 0;
+  readTable(SHEET.VIDEOS).forEach(function (r) {
+    if (String(r.status) !== VIDEO_STATUS.PROCESSING) return;
+    var claimedAt = new Date(String(r.claimed_at || r.created_at)).getTime();
+    if (!isFinite(claimedAt) || (now - claimedAt) / 60000 < limitMin) return;
+    updateRowsWhere(SHEET.VIDEOS, 'video_id', r.video_id, {
+      status: VIDEO_STATUS.PENDING,
+      claimed_at: '',
+      claimed_by: '',
+    });
+    released++;
+  });
+  if (released) logEvent('claim_released', released + '本をpendingへ戻しました');
+  return released;
+}
+
+/** 処理待ちの動画を、紐づく台本の質問ごと返す（確保はしない） */
 function listPendingVideos() {
   var questions = readTable(SHEET.QUESTIONS);
   return readTable(SHEET.VIDEOS)
