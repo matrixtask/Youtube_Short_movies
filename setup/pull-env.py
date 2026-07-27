@@ -37,6 +37,40 @@ def parse_env_file(path: Path) -> dict:
     return {ALIASES.get(k, k): v.strip() for k, v in pairs if v.strip()}
 
 
+def probe(url: str, token: str) -> tuple[bool, str]:
+    """URLとトークンの組が生きているか試す。(成功か, 説明) を返す。"""
+    if not url or not token or "…" in url:
+        return False, "未設定"
+    req = url + "?" + urllib.parse.urlencode({"token": token, "action": "videos"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as res:  # 302は自動追従
+            body = json.loads(res.read().decode("utf-8"))
+    except json.JSONDecodeError:
+        return False, "JSON以外が返る（別のデプロイ？）"
+    except Exception as e:
+        return False, str(e)
+    return (True, "OK") if body.get("ok") else (False, str(body.get("error")))
+
+
+def pick_working(urls: list[str], tokens: list[str]) -> tuple[str, str] | None:
+    """複数のURL/トークン候補から、実際に応答する組み合わせを選ぶ。
+
+    デプロイが複数あったり、ウィザードの出力が古かったりするため、
+    「どれが本物か」を人間が判断しなくて済むようにする。
+    """
+    combos = [(u, t) for u in urls if u for t in tokens if t]
+    if len(combos) <= 1:
+        return combos[0] if combos else None
+    print(f"  候補が{len(combos)}通りあるため、実際に繋がる組み合わせを探します…")
+    for url, token in combos:
+        ok, why = probe(url, token)
+        tail = url[-12:] if len(url) > 12 else url
+        print(f"    …{tail} : {'✅ OK' if ok else '✗ ' + why}")
+        if ok:
+            return url, token
+    return None
+
+
 def fetch_from_gas(url: str, token: str) -> dict:
     """GASのスクリプトプロパティから許可リストの値を取得（失敗しても致命的にしない）。"""
     if not url or not token:
@@ -121,12 +155,31 @@ def main() -> int:
         print(f"  {SECRETS_PATH.name} から {len(from_secrets)}件")
         env.update(from_secrets)
 
-    if not env.get("YTSHORTS_GAS_WEBAPP_URL"):
-        env["YTSHORTS_GAS_WEBAPP_URL"] = input("  GASのWebアプリURL: ").strip()
-    if not env.get("GAS_ADMIN_TOKEN"):
-        env["GAS_ADMIN_TOKEN"] = input("  GASのADMIN_TOKEN: ").strip()
+    # URL/トークンは古い値が混ざりやすい（デプロイし直し・ウィザードの再実行）。
+    # 候補を全部試して、実際に繋がる組み合わせを採用する。
+    url_candidates = [existing.get("YTSHORTS_GAS_WEBAPP_URL", ""),
+                      from_secrets.get("YTSHORTS_GAS_WEBAPP_URL", "")]
+    token_candidates = [existing.get("GAS_ADMIN_TOKEN", ""),
+                        from_secrets.get("GAS_ADMIN_TOKEN", "")]
+    urls = list(dict.fromkeys(u for u in url_candidates if u))
+    tokens = list(dict.fromkeys(t for t in token_candidates if t))
 
-    env.update(fetch_from_gas(env["YTSHORTS_GAS_WEBAPP_URL"], env["GAS_ADMIN_TOKEN"]))
+    found = pick_working(urls, tokens)
+    while not found:
+        print("  繋がる組み合わせがありませんでした。手入力してください")
+        print("  （URL: SlackのRequest URL / TOKEN: GASのスクリプトプロパティ ADMIN_TOKEN）")
+        url = input("  GASのWebアプリURL: ").strip()
+        token = input("  GASのADMIN_TOKEN: ").strip()
+        if not url or not token:
+            break
+        ok, why = probe(url, token)
+        print(f"    → {'✅ OK' if ok else '✗ ' + why}")
+        found = (url, token) if ok else None
+    if found:
+        env["YTSHORTS_GAS_WEBAPP_URL"], env["GAS_ADMIN_TOKEN"] = found
+
+    env.update(fetch_from_gas(env.get("YTSHORTS_GAS_WEBAPP_URL", ""),
+                              env.get("GAS_ADMIN_TOKEN", "")))
 
     write_env(env)
     print(f"\n✅ .env を書き出しました（{len([v for v in env.values() if v])}件）")
