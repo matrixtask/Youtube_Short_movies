@@ -7,7 +7,7 @@
  * （その場合は Actions の定期実行かローカルの `ytshorts pull` が拾う）。
  *
  * スクリプトプロパティ:
- *   GITHUB_REPO   例: "matrixtask/Youtube_Shrot_movies"
+ *   GITHUB_REPO   例: "matrixtask/Youtube_Short_movies"
  *   GITHUB_TOKEN  repo への repository_dispatch 権限を持つ
  *                 fine-grained PAT（Contents: Read and write）
  */
