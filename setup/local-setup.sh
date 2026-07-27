@@ -18,8 +18,17 @@ else
 fi
 
 echo "=== 2/4 Python環境（pipeline/.venv） ==="
-# 前回失敗して壊れたvenvが残っていると作り直せないため、一度消す
-[ -x pipeline/.venv/bin/python3 ] || rm -rf pipeline/.venv
+# 壊れたvenvは作り直す。以下のどちらでも作り直す:
+#  - 前回のセットアップが途中で失敗している
+#  - フォルダを移動/リネームした（binのスクリプトに旧パスが焼き込まれて動かない）
+venv_dir="$(pwd)/pipeline/.venv"
+if [ -d pipeline/.venv ]; then
+  if ! [ -x pipeline/.venv/bin/python3 ] \
+     || ! head -1 pipeline/.venv/bin/ytshorts 2>/dev/null | grep -qF "$venv_dir"; then
+    echo "  既存のvenvが使えないため作り直します（パス変更か前回の失敗）"
+    rm -rf pipeline/.venv
+  fi
+fi
 python3 -m venv pipeline/.venv
 pipeline/.venv/bin/pip install -q -U pip
 pipeline/.venv/bin/pip install -q -e ./pipeline pytest
