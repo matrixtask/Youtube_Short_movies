@@ -18,6 +18,32 @@ function doGet(e) {
       .setMimeType(ContentService.MimeType.JSON);
   }
 
+  // ローカル開発機へ設定を配る（ALLOW_ENV_EXPORT=true のときだけ有効）
+  // 許可リストのプロパティだけを返す。使い終わったらフラグを消すこと。
+  if (p.action === 'env') {
+    if (String(getProp('ALLOW_ENV_EXPORT', 'false')).toLowerCase() !== 'true') {
+      return ContentService.createTextOutput(JSON.stringify({
+        ok: false,
+        error: 'env export is disabled. スクリプトプロパティ ALLOW_ENV_EXPORT=true を一時的に設定してください',
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+    var exportable = [
+      'ANTHROPIC_API_KEY',
+      'SLACK_BOT_TOKEN',
+      'YT_CLIENT_ID',
+      'YT_CLIENT_SECRET',
+      'YT_REFRESH_TOKEN',
+    ];
+    var env = {};
+    exportable.forEach(function (key) {
+      var v = getProp(key);
+      if (v) env[key] = v;
+    });
+    logEvent('env_export', Object.keys(env).join(','));
+    return ContentService.createTextOutput(JSON.stringify({ ok: true, env: env }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   // 処理待ちの動画を返す（`ytshorts pull` が取得してダウンロード・編集する）
   if (p.action === 'videos') {
     return ContentService.createTextOutput(JSON.stringify({

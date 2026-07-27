@@ -88,6 +88,18 @@ manifest」に貼れば、スコープ・イベント購読込みで一発で作
 動画の実処理はGitHub Actions（クラウド）またはローカルPCの
 `ytshorts pull --watch` が行います。[../pipeline/README.md](../pipeline/README.md) を参照。
 
+## ローカルPCへの設定配布（任意）
+
+ローカルで `make pull` 等を動かすとき、キー類をGASから取得できます:
+
+1. スクリプトプロパティに `ALLOW_ENV_EXPORT` = `true` を**一時的に**設定
+2. ローカルで `make env-pull`（WebアプリURLとADMIN_TOKENを聞かれる）→ `.env` が埋まる
+3. **`ALLOW_ENV_EXPORT` を false にするか削除する**
+
+返るのは許可リストのプロパティ（`ANTHROPIC_API_KEY` / `SLACK_BOT_TOKEN` /
+`YT_*`）だけです。有効にしている間はADMIN_TOKENを知る人がこれらを取得
+できるため、使い終わったら必ず戻してください。
+
 ## Notion連携（任意）
 
 トークテーマとショート台帳をNotionのWikiに同期できます（毎晩22時台+手動）:

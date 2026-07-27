@@ -1,6 +1,7 @@
 # YouTube Shorts Studio — ローカル操作コマンド集
 #
 #   make setup        ローカル環境の一発構築（venv・依存・.env雛形）
+#   make env-pull     GASのスクリプトプロパティから .env を取得（要ALLOW_ENV_EXPORT）
 #   make gas-push     GASへコードを反映（clasp push）
 #   make gas-deploy   GASへ反映 + Webアプリを再デプロイ（URLは変わらない）
 #   make gas-open     GASエディタをブラウザで開く
@@ -19,13 +20,16 @@ export
 
 VENV := pipeline/.venv/bin
 
-.PHONY: help setup gas-push gas-deploy gas-open pull watch run publish compile list test
+.PHONY: help setup env-pull gas-push gas-deploy gas-open pull watch run publish compile list test
 
 help:
 	@grep -E '^#   make' Makefile | sed 's/^#   //'
 
 setup:
 	bash setup/local-setup.sh
+
+env-pull:
+	python3 setup/pull-env.py
 
 gas-push:
 	cd gas && clasp push -f
