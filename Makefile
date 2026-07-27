@@ -2,6 +2,7 @@
 #
 #   make setup        ローカル環境の一発構築（venv・依存・.env雛形）
 #   make env-pull     .env を一括生成・検証（既存/ウィザード出力/GASから集める）
+#   make gas-link     claspを既存のGASプロジェクトに紐づける（初回/再クローン後）
 #   make gas-push     GASへコードを反映（clasp push）
 #   make gas-deploy   GASへ反映 + Webアプリを再デプロイ（URLは変わらない）
 #   make gas-open     GASエディタをブラウザで開く
@@ -21,7 +22,7 @@ export
 
 VENV := pipeline/.venv/bin
 
-.PHONY: help setup env-pull gas-push gas-deploy gas-open pull watch run publish compile list gpu-check test
+.PHONY: help setup env-pull gas-link gas-push gas-deploy gas-open pull watch run publish compile list gpu-check test
 
 help:
 	@grep -E '^#   make' Makefile | sed 's/^#   //'
@@ -32,7 +33,11 @@ setup:
 env-pull:
 	python3 setup/pull-env.py
 
+gas-link:
+	bash setup/gas-link.sh
+
 gas-push:
+	@[ -f gas/.clasp.json ] || { echo "✗ gas/.clasp.json がありません。先に make gas-link"; exit 1; }
 	cd gas && clasp push -f
 
 gas-deploy: gas-push

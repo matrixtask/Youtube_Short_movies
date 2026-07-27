@@ -7,6 +7,23 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [ -f .env ] && set -a && . ./.env && set +a
+
+# 前提チェック。ここで落としておかないと、失敗に気づかないまま
+# 「デプロイしたのに反映されない」という状態になる
+if [ ! -f gas/.clasp.json ]; then
+  echo "✗ gas/.clasp.json がありません（claspがプロジェクトに紐づいていません）" >&2
+  echo "  復旧: make gas-link  （GASのスクリプトIDを聞かれます）" >&2
+  exit 1
+fi
+# マニフェストに webapp 定義が無いままデプロイすると「ライブラリ」種別になり、
+# URLを叩いてもWebアプリとして応答しない（clasp cloneでの上書き事故が典型）
+if ! grep -q '"webapp"' gas/src/appsscript.json; then
+  echo "✗ gas/src/appsscript.json に webapp の定義がありません" >&2
+  echo "  このままデプロイするとライブラリ扱いになり、Slackから叩けません" >&2
+  echo "  復旧: git checkout gas/src/appsscript.json && make gas-push" >&2
+  exit 1
+fi
+
 cd gas
 
 # 「@HEAD」は開発用の常設枠なので更新対象から除く
