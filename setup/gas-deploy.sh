@@ -1,12 +1,37 @@
 #!/usr/bin/env bash
 # GAS Webアプリの再デプロイ。既存デプロイを更新するのでURLは変わらない。
 # （新規デプロイを作るとURLが変わり、Slack/GitHub Secretsの再設定が必要になるため）
+#
+# デプロイが複数ある場合に取り違えないよう、.env の GAS_DEPLOYMENT_ID を優先する。
+# 未設定なら候補を一覧表示して選ばせる。
 set -euo pipefail
-cd "$(dirname "$0")/../gas"
+cd "$(dirname "$0")/.."
+[ -f .env ] && set -a && . ./.env && set +a
+cd gas
 
-dep_id=$(clasp deployments | awk '/@[0-9]+/{print $2; exit}' || true)
+# 「@HEAD」は開発用の常設枠なので更新対象から除く
+mapfile -t deployments < <(clasp deployments | grep -oE 'AKfycb[A-Za-z0-9_-]+ @[0-9]+' || true)
 
-if [ -n "${dep_id:-}" ]; then
+dep_id="${GAS_DEPLOYMENT_ID:-}"
+
+if [ -n "$dep_id" ]; then
+  echo "GAS_DEPLOYMENT_ID を使用: $dep_id"
+elif [ "${#deployments[@]}" -eq 1 ]; then
+  dep_id=$(echo "${deployments[0]}" | awk '{print $1}')
+  echo "デプロイを1件検出: $dep_id"
+elif [ "${#deployments[@]}" -gt 1 ]; then
+  echo "デプロイが複数あります。SlackのRequest URLと一致するものを選んでください:"
+  for i in "${!deployments[@]}"; do
+    echo "  [$i] https://script.google.com/macros/s/$(echo "${deployments[$i]}" | awk '{print $1}')/exec"
+  done
+  read -r -p "番号: " idx
+  dep_id=$(echo "${deployments[$idx]}" | awk '{print $1}')
+  echo ""
+  echo "💡 次回から選択を省くには .env に追記してください:"
+  echo "   GAS_DEPLOYMENT_ID=$dep_id"
+fi
+
+if [ -n "$dep_id" ]; then
   echo "既存デプロイ ${dep_id} を更新します（URL不変）…"
   clasp deploy -i "$dep_id" --description "deploy $(date +%Y-%m-%d_%H%M)"
 else
