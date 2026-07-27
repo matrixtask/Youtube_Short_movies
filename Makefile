@@ -11,6 +11,7 @@
 #   make publish      投稿時刻が来た承認済みショートをYouTubeへ
 #   make compile      Slack上のショートからまとめ動画を生成
 #   make list         ショートのストック一覧
+#   make gpu-check    GPUが使える状態か確認（文字起こしの高速化）
 #   make test         パイプラインのテスト実行
 #
 # APIキー類は .env に書く（.env.example をコピー。gitには入らない）
@@ -20,7 +21,7 @@ export
 
 VENV := pipeline/.venv/bin
 
-.PHONY: help setup env-pull gas-push gas-deploy gas-open pull watch run publish compile list test
+.PHONY: help setup env-pull gas-push gas-deploy gas-open pull watch run publish compile list gpu-check test
 
 help:
 	@grep -E '^#   make' Makefile | sed 's/^#   //'
@@ -57,6 +58,16 @@ compile:
 
 list:
 	cd pipeline && $(CURDIR)/$(VENV)/ytshorts list
+
+gpu-check:
+	@cd pipeline && $(CURDIR)/$(VENV)/python -c "\
+import ctranslate2 as c; \
+from ytshorts.transcribe import resolve_device; \
+n = c.get_cuda_device_count(); \
+d, p = resolve_device('auto'); \
+print(f'CTranslate2が見ているCUDAデバイス: {n}台'); \
+print(f'実行時に選ばれるデバイス: {d} ({p})'); \
+print('✅ GPUで動きます' if d == 'cuda' else '⚠ CPUで動きます（nvidia-smiでドライバを確認してください）')"
 
 test:
 	cd pipeline && $(CURDIR)/$(VENV)/python -m pytest tests/ -q
