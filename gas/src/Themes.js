@@ -31,6 +31,17 @@ var DEFAULT_THEMES = [
   ['移動中にやってる変な習慣', 'neta', 2, '人間味枠'],
   ['乗り物マニアの細かすぎる話', 'neta', 1, '早口で語るほど良い'],
   ['もし信号や渋滞がこの世に無かったら', 'neta', 1, '妄想系。真顔で語る'],
+  // ---- 上位フォーマット（再生数狙い。ランキング・金額公開・対決・衝撃数字） ----
+  ['世界最速の乗り物ランキングTOP5', 'neta', 3, 'ランキング型。数字で引く'],
+  ['新幹線 vs 飛行機、東京-大阪どっちが本当に速い？', 'neta', 3, '対決型。ドアtoドアで検証'],
+  ['空飛ぶクルマの値段、正直に公開します', 'evergreen', 3, '金額公開型。当事者しか言えない'],
+  ['「1時間の通勤」を時給換算したら衝撃だった', 'neta', 2, '衝撃数字型。チャンネルの核に直結'],
+  ['知らないと損する移動の裏ワザ3選', 'neta', 2, '〇選型。実用で保存されやすい'],
+  ['飛行機のチケット代、何にいくら払ってるのか', 'neta', 2, '内訳公開型'],
+  ['世界一渋滞がヤバい都市TOP3', 'neta', 2, 'ランキング型×共感'],
+  ['パイロット免許、取るのに本当にかかった金額', 'evergreen', 2, '金額公開型×自分史'],
+  ['スタートアップCEOの1日ルーティン', 'evergreen', 2, 'ルーティン型。飛行試験日が強い'],
+  ['10年後に消える移動手段、残る移動手段', 'evergreen', 2, '未来予測断言型。コメントが伸びる'],
 ];
 
 function seedThemesIfEmpty() {
@@ -103,4 +114,85 @@ function pickThemesForShoot() {
 
 function labelForCategory(cat) {
   return { evergreen: '定番', news: '時事', neta: 'ネタ' }[cat] || cat;
+}
+
+/**
+ * 撮影実績からテーマの重みを自動調整する（テーマの自己調整システム）。
+ * weeklyDigest から毎週実行される。手動実行も可。
+ *
+ * 実績の判定:
+ *   - 台本が期限切れ（動画が来なかった）→ その台本の全テーマに miss
+ *   - 動画は来たが、その質問からショートが生まれなかった → そのテーマに miss
+ *     （喋りにくくて飛ばした・話が弱くて品質ゲート落ち、のどちらも「合わない」signal）
+ *   - ショートが生まれた → そのテーマに hit
+ *
+ * 調整ルール（前回実行以降の実績で判定）:
+ *   - miss 2回以上 & hit 0回 → 重みを半減。0.5未満になったら 0（=出さなくなる）
+ *   - hit 2回以上 & miss 0回 → 重みを +0.5（上限3）
+ * 累計の hits / misses はThemesシートに記録され、判断の根拠が残る。
+ */
+function tuneThemeWeights() {
+  var props = PropertiesService.getScriptProperties();
+  var since = getProp('THEME_TUNED_AT', fmtDateTime(new Date(nowJst().getTime() - 7 * 86400000)));
+
+  var scripts = readTable(SHEET.SCRIPTS).filter(function (r) {
+    return String(r.created_at) >= since &&
+      (String(r.status) === SCRIPT_STATUS.EXPIRED || String(r.status) === SCRIPT_STATUS.DONE);
+  });
+  if (!scripts.length) return '対象期間（' + since + '以降）に完了・期限切れの台本がありません';
+
+  var questions = readTable(SHEET.QUESTIONS);
+  var shorts = readTable(SHEET.SHORTS).filter(function (r) {
+    return String(r.kind || 'short') !== 'wide';
+  });
+
+  var stats = {}; // theme -> {hit, miss}
+  scripts.forEach(function (s) {
+    var sid = String(s.script_id);
+    var answered = {};
+    shorts.forEach(function (sh) {
+      if (String(sh.script_id) === sid && Number(sh.question_idx) > 0) {
+        answered[Number(sh.question_idx)] = true;
+      }
+    });
+    var expired = String(s.status) === SCRIPT_STATUS.EXPIRED;
+    questions.forEach(function (q) {
+      if (String(q.script_id) !== sid) return;
+      var t = String(q.theme);
+      stats[t] = stats[t] || { hit: 0, miss: 0 };
+      if (!expired && answered[Number(q.idx)]) stats[t].hit++;
+      else stats[t].miss++;
+    });
+  });
+
+  var changed = [];
+  readTable(SHEET.THEMES).forEach(function (r) {
+    var st = stats[String(r.theme)];
+    if (!st) return;
+    var w = Number(r.weight);
+    if (!isFinite(w)) w = 1;
+    var newW = w;
+    if (st.miss >= 2 && st.hit === 0 && w > 0) {
+      newW = Math.round(w * 0.5 * 10) / 10;
+      if (newW < 0.5) newW = 0;
+    } else if (st.hit >= 2 && st.miss === 0 && w > 0) {
+      newW = Math.min(3, w + 0.5);
+    }
+    updateRowsWhere(SHEET.THEMES, 'theme', r.theme, {
+      hits: (Number(r.hits) || 0) + st.hit,
+      misses: (Number(r.misses) || 0) + st.miss,
+      weight: newW,
+    });
+    if (newW !== w) {
+      changed.push('・「' + r.theme + '」 ' + w + ' → ' + newW +
+        (newW === 0 ? '（今後出しません。復活はシートでweightを戻す）' : ''));
+    }
+  });
+
+  props.setProperty('THEME_TUNED_AT', fmtDateTime(nowJst()));
+  var msg = changed.length
+    ? '撮影実績によるテーマ調整:\n' + changed.join('\n')
+    : 'テーマの重み変更はありません（実績: ' + Object.keys(stats).length + 'テーマ分を集計）';
+  logEvent('theme_tuning', msg);
+  return msg;
 }

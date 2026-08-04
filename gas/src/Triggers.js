@@ -44,6 +44,12 @@ function weeklyDigest() {
     '先週処理した台本: ' + doneThisWeek.length + '件',
     '撮影待ち: ' + (counts[SCRIPT_STATUS.OPEN] || 0) + '件 / 取り込み待ち: ' + (counts[SCRIPT_STATUS.SHOT] || 0) + '件',
   ];
+  // テーマの自己調整（撮られなかった・飛ばされたテーマを減らす）
+  try {
+    lines.push('', tuneThemeWeights());
+  } catch (e) {
+    logEvent('theme_tuning_error', String(e));
+  }
   if ((counts[SCRIPT_STATUS.SHOT] || 0) > 0) {
     lines.push(':warning: 撮影済みで取り込んでいない動画があります。inbox に入れて `ytshorts run` を実行してください。');
   }

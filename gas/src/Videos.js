@@ -259,6 +259,7 @@ function registerShort(payload) {
     youtube_url: '',
     published_at: '',
     kind: kind,
+    question_idx: String(payload.question_idx || 0),
   });
   // 承認依頼（YouTubeショート投稿）は縦版のみ。ワイド版はまとめ用の素材
   if (kind !== 'wide') {

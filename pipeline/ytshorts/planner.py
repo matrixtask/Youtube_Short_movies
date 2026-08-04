@@ -63,10 +63,13 @@ def build_planner_prompt(transcript: dict, cfg: Config, script_questions: list[d
         "できるだけ多くのショートを切り出す（質の低いものも score を付けて出す）。"
     )
     parts.append(
-        'JSONで出力: {"shorts": [{"id", "title", "hook", "clip": {"start", "end"}, '
+        'JSONで出力: {"shorts": [{"id", "title", "hook", "question_idx", '
+        '"clip": {"start", "end"}, '
         '"extra_cuts": [{"start", "end", "reason"}], "captions": [{"start", "end", "text"}], '
         '"overlays": [{"time", "duration", "text"}], '
         '"illustrations": [{"time", "duration", "prompt"}], "score", "score_reason"}]}'
+        "\nquestion_idx はこの話が台本のどの質問への回答かを示す番号。"
+        "台本が無い・どの質問でもない場合は 0。"
     )
     return "\n".join(parts)
 
@@ -159,10 +162,17 @@ def normalize_plan(plan: dict, duration: float) -> dict:
         except (TypeError, ValueError):
             score = 0
 
+        # どの質問への回答かの追跡（テーマの自動調整に使う）
+        try:
+            question_idx = max(0, int(s.get("question_idx") or 0))
+        except (TypeError, ValueError):
+            question_idx = 0
+
         shorts.append({
             "id": str(s.get("id") or f"s{i + 1}"),
             "title": str(s.get("title") or "").strip() or f"short {i + 1}",
             "hook": str(s.get("hook") or "").strip(),
+            "question_idx": question_idx,
             "clip": {"start": start, "end": end},
             "extra_cuts": extra_cuts,
             "captions": captions,

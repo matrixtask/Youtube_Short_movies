@@ -79,3 +79,16 @@ class TestNormalizePlan:
 
     def test_no_shorts_key(self):
         assert normalize_plan({}, 60.0) == {"shorts": []}
+
+    def test_question_idx_passthrough(self):
+        plan = normalize_plan({"shorts": [make_short(question_idx=3)]}, 100.0)
+        assert plan["shorts"][0]["question_idx"] == 3
+
+    def test_question_idx_defaults_to_zero(self):
+        # フリートーク等、台本が無いときは0（テーマ調整の対象外になる）
+        plan = normalize_plan({"shorts": [make_short()]}, 100.0)
+        assert plan["shorts"][0]["question_idx"] == 0
+
+    def test_question_idx_bad_value(self):
+        plan = normalize_plan({"shorts": [make_short(question_idx="三")]}, 100.0)
+        assert plan["shorts"][0]["question_idx"] == 0

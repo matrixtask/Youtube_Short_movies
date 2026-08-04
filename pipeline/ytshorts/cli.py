@@ -154,6 +154,7 @@ def process_video(video: Path, cfg: Config, script: dict | None, force: bool) ->
             "short_id": short["id"],
             "title": short["title"],
             "score": short["score"],
+            "question_idx": short.get("question_idx", 0),
             "duration": round(out_dur, 1),
             "created_at": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
         })
@@ -270,6 +271,7 @@ def share_shorts_to_slack(cfg: Config, token: str, channel: str, video: dict, ma
                     "title": m["title"],
                     "score": m["score"],
                     "duration": m["duration"],
+                    "question_idx": m.get("question_idx", 0),
                     "slack_file_id": info["id"],
                     "url_private": info["url_private"],
                     "kind": kind,
