@@ -193,6 +193,98 @@ function tuneThemeWeights() {
   var msg = changed.length
     ? '撮影実績によるテーマ調整:\n' + changed.join('\n')
     : 'テーマの重み変更はありません（実績: ' + Object.keys(stats).length + 'テーマ分を集計）';
+
+  // 個別の上げ下げに加えて、「なぜ喋れないのか」の傾向を抽出して
+  // まだ撮っていないテーマへ汎化する（下の analyzeThemeDifferences）
+  try {
+    var generalized = analyzeThemeDifferences(stats);
+    if (generalized) msg += '\n\n' + generalized;
+  } catch (e) {
+    logEvent('theme_insight_error', String(e));
+  }
+
   logEvent('theme_tuning', msg);
   return msg;
+}
+
+/**
+ * 喋れたテーマと喋れなかったテーマを比較し、差分（傾向）を抽出して
+ * 未検証のテーマに事前適用する（テーマ自己調整の汎化ステップ）。
+ *
+ * 例:「具体的な体験を聞かれると喋れるが、抽象論・数字の暗記が要る話は
+ * 飛ばしがち」といった傾向をClaudeに言語化させ、
+ *   1. まだ実績のないテーマの重みを傾向に基づいて先回りで調整
+ *   2. 傾向をスクリプトプロパティ THEME_INSIGHTS に蓄積し、
+ *      以後の台本生成で「喋りやすい聞き方」への言い換えに使う
+ * の2経路で反映する。テーマ名だけでなく「聞き方」も適応するのが狙い。
+ */
+function analyzeThemeDifferences(stats) {
+  var all = readTable(SHEET.THEMES);
+  var spoken = [];
+  var skipped = [];
+  var untried = [];
+  all.forEach(function (r) {
+    var name = String(r.theme);
+    var st = stats[name];
+    var label = name + (r.notes ? '（' + r.notes + '）' : '');
+    if (st && st.hit > 0) spoken.push(label);
+    else if (st && st.miss > 0) skipped.push(label);
+    else if (Number(r.weight) > 0) untried.push(name);
+  });
+  // 比較には両方の材料が必要（片方だけでは「差分」が取れない）
+  if (!spoken.length || !skipped.length) return null;
+
+  var previous = String(getProp('THEME_INSIGHTS', ''));
+  var system = [
+    'あなたは番組プロデューサーです。話し手の撮影実績から、',
+    '「どんなテーマ・聞き方なら喋れて、どんなものだと喋れないのか」の傾向を抽出します。',
+    '似ているのに結果が分かれたテーマの対比から、本質的な違い（具体性・自分事度・',
+    '準備の要否・感情の乗せやすさ等）を見つけてください。',
+  ].join('\n');
+  var user = [
+    '喋れたテーマ（ショートが生まれた）:',
+    spoken.map(function (s) { return '- ' + s; }).join('\n'),
+    '',
+    '喋れなかったテーマ（動画が来ない・飛ばされた）:',
+    skipped.map(function (s) { return '- ' + s; }).join('\n'),
+    previous ? '\nこれまでに分かっている傾向:\n' + previous : '',
+    '',
+    'まだ実績のないテーマ:',
+    untried.map(function (s) { return '- ' + s; }).join('\n'),
+    '',
+    'JSONで出力:',
+    '{"insights": ["傾向を短い文で3〜5個"],',
+    ' "adjustments": [{"theme": "未検証テーマ名（完全一致）", "delta": -1〜1の数値, "reason": "簡潔に"}]}',
+    'adjustmentsは、抽出した傾向から喋れなさそう（負）/喋れそう（正）と予測できる',
+    '未検証テーマだけに出す。確信が持てないものは含めない。',
+  ].join('\n');
+
+  var result = askClaudeJson(system, user, 3000);
+  if (!result || !Array.isArray(result.insights)) return null;
+
+  // 1. 未検証テーマへ事前適用（±1に制限、0〜3にクランプ）
+  var applied = [];
+  (result.adjustments || []).forEach(function (a) {
+    var name = String(a.theme || '');
+    if (untried.indexOf(name) < 0) return; // 実績のあるテーマは個別調整に任せる
+    var delta = Math.max(-1, Math.min(1, Number(a.delta) || 0));
+    if (!delta) return;
+    var row = all.filter(function (r) { return String(r.theme) === name; })[0];
+    var w = Number(row.weight);
+    if (!isFinite(w)) w = 1;
+    var newW = Math.round(Math.max(0, Math.min(3, w + delta)) * 10) / 10;
+    if (newW === w) return;
+    updateRowsWhere(SHEET.THEMES, 'theme', name, { weight: newW });
+    applied.push('・「' + name + '」 ' + w + ' → ' + newW + '（' + String(a.reason || '').slice(0, 40) + '）');
+  });
+
+  // 2. 傾向を蓄積（台本生成が毎朝参照する）。古いものから捨てて肥大化を防ぐ
+  var insights = result.insights.map(function (s) { return '- ' + String(s).slice(0, 100); });
+  var merged = (previous ? previous + '\n' : '') + insights.join('\n');
+  var lines = merged.split('\n').slice(-10);
+  PropertiesService.getScriptProperties().setProperty('THEME_INSIGHTS', lines.join('\n'));
+
+  var out = '学習した傾向:\n' + insights.join('\n');
+  if (applied.length) out += '\n未検証テーマへの先回り調整:\n' + applied.join('\n');
+  return out;
 }

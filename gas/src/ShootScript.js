@@ -104,6 +104,13 @@ function generateShootQuestions(themes, count, recentNotes) {
     '- 各質問に neta（答えの途中に挟む小ネタの指示。例: 「ここで一回真顔で沈黙」「あるあるを1個入れる」）を付ける。全問でなくてよい（半分程度）',
     '- ネタカテゴリの質問はゆるく、笑える話や人間味が出る話を引き出す',
   ].join('\n');
+  // 撮影実績から学習した「喋りやすさの傾向」を聞き方に反映する
+  // （tuneThemeWeights → analyzeThemeDifferences が毎週更新）
+  var insights = getProp('THEME_INSIGHTS');
+  if (insights) {
+    system += '\n\n話し手の傾向（撮影実績からの学習。最重要）:\n' + insights +
+      '\n喋りにくい傾向に当たる質問は、喋りやすい傾向側の切り口に言い換えて出題する。';
+  }
   var user = [
     '今日のテーマ:',
     themes.map(function (t) { return '- ' + t.theme + '（カテゴリ: ' + t.category + (t.notes ? ' / メモ: ' + t.notes : '') + '）'; }).join('\n'),
