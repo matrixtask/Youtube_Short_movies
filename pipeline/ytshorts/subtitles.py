@@ -41,12 +41,15 @@ def build_ass_header(
     hook_color: str = "#FFE600",
     tsukkomi_color: str = "#FFD700",
     title_color: str = "#FFFFFF",
+    caption_margin: float = 0.177,
+    tsukkomi_margin: float = 0.365,
+    caption_fontsize: int = 72,
 ) -> str:
     # Caption=下部中央 / Hook=中央上寄りの大テキスト / Tsukkomi=上部のネタ字幕 /
     # Title=上帯の常時タイトル（fitレイアウト用）。余白は高さに比例させる
-    mv_caption = round(height * 0.177)
+    mv_caption = round(height * caption_margin)
     mv_hook = round(height * 0.219)
-    mv_tsukkomi = round(height * 0.365)
+    mv_tsukkomi = round(height * tsukkomi_margin)
     mv_title = round(height * 0.055)
     return f"""[Script Info]
 ScriptType: v4.00+
@@ -57,7 +60,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Caption,{font},72,{ass_color(caption_color)},&H000000FF,&H00101010,&H96000000,-1,0,0,0,100,100,0,0,1,5,2,2,60,60,{mv_caption},1
+Style: Caption,{font},{caption_fontsize},{ass_color(caption_color)},&H000000FF,&H00101010,&H96000000,-1,0,0,0,100,100,0,0,1,5,2,2,60,60,{mv_caption},1
 Style: Hook,{font},96,{ass_color(hook_color)},&H000000FF,&H00101010,&H96000000,-1,0,0,0,100,100,0,0,1,7,3,8,60,60,{mv_hook},1
 Style: Tsukkomi,{font},66,{ass_color(tsukkomi_color)},&H000000FF,&H00101010,&H96000000,-1,0,0,0,100,100,0,0,1,5,2,8,60,60,{mv_tsukkomi},1
 Style: Title,{font},84,{ass_color(title_color)},&H000000FF,&H00101010,&H96000000,-1,0,0,0,100,100,0,0,1,4,2,8,60,60,{mv_title},1

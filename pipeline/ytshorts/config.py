@@ -41,6 +41,13 @@ class Config:
     hook_color: str = "#FFE600"
     tsukkomi_color: str = "#FFD700"
     title_color: str = "#FFFFFF"  # fitレイアウトの上帯タイトル
+    # レイアウト位置（すべて画面に対する比率 0〜1）
+    caption_margin: float = 0.177  # 本文字幕の下からの余白
+    tsukkomi_margin: float = 0.365  # ツッコミ字幕の上からの余白
+    caption_fontsize: int = 72  # 本文字幕の文字サイズ（1080幅基準）
+    video_y: float = 0.42  # fitレイアウトの映像の縦位置（0=上寄せ 0.5=中央）
+    illustration_width: float = 0.8  # 挿絵の幅（画面幅比）
+    illustration_y: float = 0.38  # 挿絵の中心の縦位置（上から）
     # GAS連携（任意）
     gas_webapp_url: str = ""
     gas_admin_token: str = ""

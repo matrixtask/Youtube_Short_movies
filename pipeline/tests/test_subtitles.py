@@ -33,6 +33,13 @@ class TestBuildAssHeader:
         assert "Rounded Mplus" in header
         assert "&H0000FF00" in header
 
+    def test_custom_positions_and_size(self):
+        header = build_ass_header(1080, 1920, caption_margin=0.25,
+                                  tsukkomi_margin=0.5, caption_fontsize=90)
+        assert f",{round(1920 * 0.25)},1" in header   # 字幕位置
+        assert f",{round(1920 * 0.5)},1" in header    # ツッコミ位置
+        assert ",90," in header                        # フォントサイズ
+
 
 class TestFormatAssTime:
     def test_zero(self):

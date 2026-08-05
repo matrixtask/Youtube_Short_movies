@@ -45,8 +45,17 @@ PLANNER_SYSTEM = """あなたはYouTubeショート専門の動画編集者で�
 時刻は必ず文字起こしのタイムスタンプの範囲内で指定する。"""
 
 
-def build_planner_prompt(transcript: dict, cfg: Config, script_questions: list[dict] | None) -> str:
+def build_planner_prompt(
+    transcript: dict,
+    cfg: Config,
+    script_questions: list[dict] | None,
+    instructions: str = "",
+) -> str:
     parts = []
+    if instructions.strip():
+        parts.append("この動画への編集指示（撮影者本人から。最優先で従う）:")
+        parts.append(instructions.strip())
+        parts.append("")
     if script_questions:
         parts.append("この動画は以下の質問に答えたものです（台本）:")
         for q in script_questions:
@@ -85,10 +94,15 @@ def build_planner_system(cfg: Config) -> str:
     return system
 
 
-def generate_plan(transcript: dict, cfg: Config, script_questions: list[dict] | None = None) -> dict:
+def generate_plan(
+    transcript: dict,
+    cfg: Config,
+    script_questions: list[dict] | None = None,
+    instructions: str = "",
+) -> dict:
     raw = ask_claude_json(
         build_planner_system(cfg),
-        build_planner_prompt(transcript, cfg, script_questions),
+        build_planner_prompt(transcript, cfg, script_questions, instructions),
         max_tokens=16000,
         model=cfg.claude_model,
     )
@@ -184,10 +198,12 @@ def normalize_plan(plan: dict, duration: float) -> dict:
     return {"shorts": shorts}
 
 
-def load_or_generate_plan(transcript: dict, session_dir, cfg: Config, script_questions=None) -> dict:
+def load_or_generate_plan(
+    transcript: dict, session_dir, cfg: Config, script_questions=None, instructions: str = ""
+) -> dict:
     path = session_dir / "plan.json"
     if path.exists():
         return json.loads(path.read_text(encoding="utf-8"))
-    plan = generate_plan(transcript, cfg, script_questions)
+    plan = generate_plan(transcript, cfg, script_questions, instructions)
     path.write_text(json.dumps(plan, ensure_ascii=False, indent=1), encoding="utf-8")
     return plan

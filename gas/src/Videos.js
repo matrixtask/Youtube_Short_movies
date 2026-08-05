@@ -52,6 +52,9 @@ function handleVideoUpload(event) {
       size: String(f.size || ''),
       status: VIDEO_STATUS.PENDING,
       processed_at: '',
+      // 動画に添えたメッセージはそのまま編集指示として使う
+      // （例:「フリートーク。テロップ多め、ツッコミ辛口で」）
+      instructions: String(event.text || '').slice(0, 500),
     });
     added++;
   });
@@ -200,6 +203,7 @@ function listPendingVideos() {
         file_name: String(r.file_name),
         url_private: String(r.url_private),
         size: Number(r.size) || 0,
+        instructions: String(r.instructions || ''),
         questions: questions
           .filter(function (q) { return scriptId && String(q.script_id) === scriptId; })
           .sort(function (a, b) { return Number(a.idx) - Number(b.idx); })

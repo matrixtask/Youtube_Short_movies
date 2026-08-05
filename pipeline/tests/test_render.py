@@ -22,6 +22,16 @@ class TestFitLayout:
         assert band_color_arg("#101820") == "0x101820"
         assert band_color_arg("bad") == "0x101820"
 
+    def test_video_position_configurable(self):
+        fc = build_filter_complex([(0.0, 10.0)], None, [], fit=True, video_y=0.5)
+        assert "(oh-ih)*0.5" in fc
+
+    def test_illustration_position_configurable(self):
+        fc = build_filter_complex([(0.0, 10.0)], None, [(1, 3.0, 6.0)],
+                                  ill_width=0.5, ill_y=0.5)
+        assert "[1:v]scale=540:-1[ill0]" in fc      # 幅50%
+        assert "overlay=(W-w)/2:(H-h)/2-0:" in fc   # 中心=画面中央
+
 
 class TestEscapeFilterPath:
     def test_colon_escaped(self):

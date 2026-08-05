@@ -32,6 +32,9 @@ def build_filter_complex(
     fps: int = 30,
     fit: bool = False,
     band_color: str = "#101820",
+    video_y: float = 0.42,
+    ill_width: float = 0.8,
+    ill_y: float = 0.38,
 ) -> str:
     """ショート1本ぶんの filter_complex を組み立てる。
 
@@ -52,10 +55,10 @@ def build_filter_complex(
     parts.append(f"{pairs}concat=n={len(keep)}:v=1:a=1[vcut][acut]")
 
     if fit:
-        # 横幅フィット + 上下帯（映像は中央よりやや上に置き、下の帯を字幕用に広く取る）
+        # 横幅フィット + 上下帯（既定では映像を中央よりやや上に置き、下の帯を字幕用に広く取る）
         chain = (
             f"[vcut]scale={width}:-2,"
-            f"pad={width}:{height}:0:(oh-ih)*0.42:color={band_color_arg(band_color)},"
+            f"pad={width}:{height}:0:(oh-ih)*{video_y:g}:color={band_color_arg(band_color)},"
             f"fps={fps},setsar=1"
         )
     else:
@@ -71,9 +74,11 @@ def build_filter_complex(
         label = "vsub"
 
     for k, (idx, start, end) in enumerate(illustrations):
-        parts.append(f"[{idx}:v]scale={int(width * 0.8)}:-1[ill{k}]")
+        parts.append(f"[{idx}:v]scale={int(width * ill_width)}:-1[ill{k}]")
+        # 挿絵の中心が画面の ill_y（上からの比率）に来るように置く
+        offset = int(height * (0.5 - ill_y))
         parts.append(
-            f"[{label}][ill{k}]overlay=(W-w)/2:(H-h)/2-{int(height * 0.12)}"
+            f"[{label}][ill{k}]overlay=(W-w)/2:(H-h)/2-{offset}"
             f":enable='between(t,{start:.3f},{end:.3f})'[vov{k}]"
         )
         label = f"vov{k}"
@@ -108,6 +113,9 @@ def build_short_command(
         cfg.fps,
         fit=fit,
         band_color=cfg.band_color,
+        video_y=cfg.video_y,
+        ill_width=cfg.illustration_width,
+        ill_y=cfg.illustration_y,
     )
     cmd += [
         "-filter_complex", fc,

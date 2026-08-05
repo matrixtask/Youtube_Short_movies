@@ -36,5 +36,13 @@ hook_color: "#FFE600"     # 冒頭フック
 tsukkomi_color: "#FFD700" # ツッコミ・ネタ字幕
 title_color: "#FFFFFF"    # 上帯の常時タイトル（fitのみ）
 
+# レイアウト位置（画面に対する比率 0〜1）
+caption_margin: 0.177     # 本文字幕の下からの余白（大きいほど上に上がる）
+tsukkomi_margin: 0.365    # ツッコミの上からの余白（大きいほど下に下がる）
+caption_fontsize: 72      # 本文字幕の文字サイズ
+video_y: 0.42             # fitレイアウトの映像の縦位置（0=上寄せ 0.5=中央）
+illustration_width: 0.8   # 挿絵の幅（画面幅比）
+illustration_y: 0.38      # 挿絵の中心の縦位置（上から）
+
 # GAS撮影台本システムとの連携（任意。空なら台本なしで動く）
 gas_webapp_url: ""        # GASのWebアプリURL（gas/README.md参照）

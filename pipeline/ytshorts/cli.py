@@ -62,7 +62,9 @@ def find_inbox_videos(cfg: Config) -> list[Path]:
     ) if cfg.inbox.exists() else []
 
 
-def process_video(video: Path, cfg: Config, script: dict | None, force: bool) -> list[dict]:
+def process_video(
+    video: Path, cfg: Config, script: dict | None, force: bool, instructions: str = ""
+) -> list[dict]:
     """1本の撮りっぱなし動画からショートを量産する。生成したindexエントリを返す。"""
     session_dir = cfg.sessions / video.stem
     session_dir.mkdir(parents=True, exist_ok=True)
@@ -76,8 +78,10 @@ def process_video(video: Path, cfg: Config, script: dict | None, force: bool) ->
     print(f"      {transcript['duration']:.0f}秒 / {len(words)}語")
 
     print("[2/4] Claudeが編集プランを作成中…")
+    if instructions.strip():
+        print(f"      編集指示: {instructions.strip()[:80]}")
     questions = script.get("questions") if script else None
-    plan = planner.load_or_generate_plan(transcript, session_dir, cfg, questions)
+    plan = planner.load_or_generate_plan(transcript, session_dir, cfg, questions, instructions)
     shorts = plan["shorts"]
     print(f"      {len(shorts)}本のショート候補（品質ゲート: {cfg.quality_threshold}点）")
 
@@ -119,6 +123,9 @@ def process_video(video: Path, cfg: Config, script: dict | None, force: bool) ->
             "hook_color": cfg.hook_color,
             "tsukkomi_color": cfg.tsukkomi_color,
             "title_color": cfg.title_color,
+            "caption_margin": cfg.caption_margin,
+            "tsukkomi_margin": cfg.tsukkomi_margin,
+            "caption_fontsize": cfg.caption_fontsize,
         }
         # 横型ソースは既定で「横幅フィット+上下帯（帯にタイトル）」でショート化する
         landscape = is_landscape(video)
@@ -233,7 +240,8 @@ def pull_once(cfg: Config) -> int:
                 print(f"⬇ {v.get('file_name')} をダウンロード中…")
                 pull.download_slack_file(v["url_private"], dest, token)
             script = {"script_id": v.get("script_id") or None, "questions": v.get("questions") or []}
-            made = process_video(dest, cfg, script if script["questions"] else None, force=False)
+            made = process_video(dest, cfg, script if script["questions"] else None,
+                                 force=False, instructions=v.get("instructions", ""))
             index.extend(made)
             save_index(cfg, index)
             shared = share_shorts_to_slack(cfg, token, channel, v, made)
