@@ -19,11 +19,58 @@ function requireDashToken(token) {
   if (!token || token !== getProp('ADMIN_TOKEN')) throw new Error('unauthorized');
 }
 
-/** ダッシュボードからの承認・却下（Slackの「承認 xxxx」と同じ処理・同じ通知） */
-function dashApprove(token, code, approve) {
+/**
+ * ダッシュボードからのショート操作（個別 = short_id / 一括 = 'all'）。
+ *   approve     承認待ち → 承認済み（次の投稿枠で自動投稿）
+ *   reject      承認待ち・承認済み・予約済み → 却下（予約は取り下げ）
+ *   publish_now 即時投稿（承認を兼ねる。予約時刻を今にしてActionsを起動）
+ */
+function dashShortAction(token, action, target) {
   requireDashToken(token);
-  handleApprovalCommand((approve ? '承認 ' : '却下 ') + String(code || ''));
-  return approve ? '承認しました' : '却下しました';
+  var ALLOWED = {
+    approve: [SHORT_STATUS.STOCK],
+    reject: [SHORT_STATUS.STOCK, SHORT_STATUS.APPROVED, SHORT_STATUS.SCHEDULED],
+    publish_now: [SHORT_STATUS.STOCK, SHORT_STATUS.APPROVED, SHORT_STATUS.SCHEDULED],
+  };
+  var statuses = ALLOWED[action];
+  if (!statuses) return '不明な操作です: ' + action;
+  var rows = readTable(SHEET.SHORTS).filter(function (r) {
+    return String(r.kind || 'short') !== 'wide' && statuses.indexOf(String(r.status)) >= 0;
+  });
+  var targets = target === 'all' ? rows : rows.filter(function (r) {
+    return String(r.short_id) === String(target);
+  });
+  if (!targets.length) return '対象のショートがありません';
+
+  var now = fmtDateTime(nowJst());
+  targets.forEach(function (r) {
+    if (action === 'approve') {
+      updateRowsWhere(SHEET.SHORTS, 'short_id', r.short_id, { status: SHORT_STATUS.APPROVED });
+    } else if (action === 'reject') {
+      updateRowsWhere(SHEET.SHORTS, 'short_id', r.short_id,
+        { status: SHORT_STATUS.REJECTED, scheduled_at: '' });
+    } else {
+      updateRowsWhere(SHEET.SHORTS, 'short_id', r.short_id,
+        { status: SHORT_STATUS.SCHEDULED, scheduled_at: now });
+    }
+  });
+  var titles = targets.map(function (r) { return '「' + r.title + '」'; }).join(' ');
+  logEvent('dash_' + action, targets.map(function (r) { return r.short_id; }).join(','));
+
+  if (action === 'approve') {
+    notifySlack(':white_check_mark: ' + targets.length + '本を承認しました（ダッシュボードから）: ' + titles +
+      '\n次の投稿枠でYouTubeへ自動投稿します。');
+    return targets.length + '本を承認しました';
+  }
+  if (action === 'reject') {
+    notifySlack(':wastebasket: ' + targets.length + '本を却下しました（ダッシュボードから）: ' + titles);
+    return targets.length + '本を却下しました';
+  }
+  var dispatched = triggerGithub('publish-requested');
+  notifySlack(':rocket: ' + targets.length + '本を今すぐ投稿します（ダッシュボードから）: ' + titles +
+    (dispatched ? '' : '\n（Actions未設定のため次の毎時実行で投稿されます）'));
+  return targets.length + '本を投稿キューに入れました' +
+    (dispatched ? '。数分でYouTubeへアップロードされます' : '。次の毎時実行で投稿されます');
 }
 
 /** ダッシュボードからの再生数更新 */
@@ -181,31 +228,56 @@ function renderDashboard(token) {
 
   // ⏳ 承認待ち
   html.push('<div class="sec" id="sec-stock">');
-  if (!stock.length) html.push('<div class="empty">承認待ちはありません</div>');
+  if (stock.length) {
+    html.push('<div class="card"><div class="body">',
+      '<button class="ok" onclick="sact(\'approve\',\'all\',\'承認待ちを全部承認しますか？\')">✔ 全部承認</button>',
+      '<button class="ng" onclick="sact(\'reject\',\'all\',\'承認待ちを全部却下しますか？\')">✖ 全部却下</button>',
+      '</div></div>');
+  } else {
+    html.push('<div class="empty">承認待ちはありません</div>');
+  }
   stock.forEach(function (r) {
     var code = shortCode(r.short_id);
-    html.push(dashCard(r.slack_file_id, 
+    html.push(dashCard(r.slack_file_id,
       '<div class="title">' + escapeHtml(r.title) + '</div>' +
       '<div class="meta">コード ' + escapeHtml(code) + ' / ' + escapeHtml(r.score) + '点' +
       (String(r.visual_score || '') ? ' / 見た目' + escapeHtml(r.visual_score) + '点' : '') + ' / ' +
       escapeHtml(r.duration) + '秒 / ' + escapeHtml(r.created_at) + '</div>' +
-      '<button class="ok" onclick="approve(\'' + escapeHtml(code) + '\',true)">承認</button>' +
-      '<button class="ng" onclick="approve(\'' + escapeHtml(code) + '\',false)">却下</button>', r.thumb));
+      '<button class="ok" onclick="sact(\'approve\',\'' + escapeHtml(r.short_id) + '\')">承認</button>' +
+      '<button class="rb" onclick="sact(\'publish_now\',\'' + escapeHtml(r.short_id) +
+      '\',\'今すぐYouTubeに投稿しますか？（承認を兼ねます）\')">🚀 今すぐ投稿</button>' +
+      '<button class="ng" onclick="sact(\'reject\',\'' + escapeHtml(r.short_id) + '\',\'却下しますか？\')">却下</button>',
+      r.thumb));
   });
   html.push('</div>');
 
   // 📅 投稿予約（予約済み → 承認済みの順）
   html.push('<div class="sec" id="sec-queue">');
-  if (!approved.length && !scheduled.length) html.push('<div class="empty">予約はありません</div>');
+  if (approved.length || scheduled.length) {
+    html.push('<div class="card"><div class="body">',
+      '<button class="rb" onclick="sact(\'publish_now\',\'all\',',
+      '\'予約中を全部今すぐ投稿しますか？（YouTube APIの上限 約6本/日に注意）\')">🚀 全部今すぐ投稿</button>',
+      '</div></div>');
+  } else {
+    html.push('<div class="empty">予約はありません</div>');
+  }
   scheduled.forEach(function (r) {
-    html.push(dashCard(r.slack_file_id, 
+    html.push(dashCard(r.slack_file_id,
       '<div class="title">' + escapeHtml(r.title) + '</div>' +
-      '<div class="meta">🕐 ' + escapeHtml(r.scheduled_at) + ' に投稿予定（' + escapeHtml(r.score) + '点）</div>', r.thumb));
+      '<div class="meta">🕐 ' + escapeHtml(r.scheduled_at) + ' に投稿予定（' + escapeHtml(r.score) + '点）</div>' +
+      '<button class="rb" onclick="sact(\'publish_now\',\'' + escapeHtml(r.short_id) +
+      '\',\'今すぐYouTubeに投稿しますか？\')">🚀 今すぐ投稿</button>' +
+      '<button class="ng" onclick="sact(\'reject\',\'' + escapeHtml(r.short_id) +
+      '\',\'予約を取り下げて却下しますか？\')">取り下げ</button>', r.thumb));
   });
   approved.forEach(function (r) {
-    html.push(dashCard(r.slack_file_id, 
+    html.push(dashCard(r.slack_file_id,
       '<div class="title">' + escapeHtml(r.title) + '</div>' +
-      '<div class="meta">承認済み・次の毎時処理で投稿枠を割当て（' + escapeHtml(r.score) + '点）</div>', r.thumb));
+      '<div class="meta">承認済み・次の毎時処理で投稿枠を割当て（' + escapeHtml(r.score) + '点）</div>' +
+      '<button class="rb" onclick="sact(\'publish_now\',\'' + escapeHtml(r.short_id) +
+      '\',\'今すぐYouTubeに投稿しますか？\')">🚀 今すぐ投稿</button>' +
+      '<button class="ng" onclick="sact(\'reject\',\'' + escapeHtml(r.short_id) +
+      '\',\'承認を取り消して却下しますか？\')">取り下げ</button>', r.thumb));
   });
   html.push('</div>');
 
@@ -306,8 +378,9 @@ function renderDashboard(token) {
     'setTimeout(function(){location.reload()},4000)}).withFailureHandler(fail)[fn](TOKEN)}',
     'function fail(e){var t=document.getElementById("toast");t.textContent="エラー: "+e.message;',
     't.style.background="#8a2b2b";t.style.display="block"}',
-    'function approve(code,ok){if(!ok&&!confirm("却下しますか？"))return;',
-    'google.script.run.withSuccessHandler(toast).withFailureHandler(fail).dashApprove(TOKEN,code,ok)}',
+    'function sact(action,id,msg){if(msg&&!confirm(msg))return;',
+    'say("実行中…");',
+    'google.script.run.withSuccessHandler(toast).withFailureHandler(fail).dashShortAction(TOKEN,action,id)}',
     'function reedit(id){var v=document.getElementById("ins_"+id).value.trim();',
     'if(!v){alert("指示を入力してください");return}',
     'google.script.run.withSuccessHandler(toast).withFailureHandler(fail).dashReedit(TOKEN,id,v)}',
