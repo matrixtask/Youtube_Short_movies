@@ -25,6 +25,10 @@ class Config:
     short_min_sec: float = 15.0
     short_max_sec: float = 59.0
     quality_threshold: int = 70  # このスコア未満のショートはレンダリングしない
+    # 見た目の自己採点（レンダリング後にvisionでテロップ・挿絵・サムネを採点）
+    visual_review: bool = True
+    visual_threshold: int = 70  # この点未満は再生成・調整して作り直す
+    visual_max_retries: int = 2  # 作り直しの上限回数（コストと時間の歯止め）
     # チャンネル・テイスト
     channel_concept: str = "中井佑の、とにかく早く移動したい！"
     style_notes: str = ""  # 編集テイストの指示（字幕の口調・ツッコミの温度感など）

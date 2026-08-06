@@ -186,7 +186,8 @@ function renderDashboard(token) {
     var code = shortCode(r.short_id);
     html.push(dashCard(r.slack_file_id, 
       '<div class="title">' + escapeHtml(r.title) + '</div>' +
-      '<div class="meta">コード ' + escapeHtml(code) + ' / ' + escapeHtml(r.score) + '点 / ' +
+      '<div class="meta">コード ' + escapeHtml(code) + ' / ' + escapeHtml(r.score) + '点' +
+      (String(r.visual_score || '') ? ' / 見た目' + escapeHtml(r.visual_score) + '点' : '') + ' / ' +
       escapeHtml(r.duration) + '秒 / ' + escapeHtml(r.created_at) + '</div>' +
       '<button class="ok" onclick="approve(\'' + escapeHtml(code) + '\',true)">承認</button>' +
       '<button class="ng" onclick="approve(\'' + escapeHtml(code) + '\',false)">却下</button>', r.thumb));

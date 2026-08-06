@@ -56,18 +56,29 @@ def svg_to_png(svg_path: Path, png_path: Path, size: int = 900) -> bool:
     return False
 
 
-def generate_illustrations(short: dict, out_dir: Path, cfg: Config) -> list[Path | None]:
-    """ショートの挿絵を生成してPNGパスのリストを返す（失敗分は None）。"""
+def generate_illustrations(short: dict, out_dir: Path, cfg: Config,
+                           critique: str = "") -> list[Path | None]:
+    """ショートの挿絵を生成してPNGパスのリストを返す（失敗分は None）。
+
+    critique を渡すと既存の挿絵を捨てて描き直す（見た目採点で不合格だったとき）。
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
     results: list[Path | None] = []
     for i, ill in enumerate(short.get("illustrations") or []):
         png = out_dir / f"{short['id']}_ill{i}.png"
+        svg_path = out_dir / f"{short['id']}_ill{i}.svg"
+        if critique:
+            png.unlink(missing_ok=True)
+            svg_path.unlink(missing_ok=True)
         if png.exists():
             results.append(png)
             continue
-        svg_path = out_dir / f"{short['id']}_ill{i}.svg"
+        prompt = "場面: " + ill["prompt"]
+        if critique:
+            prompt += ("\n\n前回の絵は品質チェックで不合格でした。指摘: " + critique +
+                       "\n指摘を避けて、よりシンプルで崩れない絵にしてください。")
         try:
-            text = ask_claude(SVG_SYSTEM, "場面: " + ill["prompt"], max_tokens=4000, model=cfg.claude_model)
+            text = ask_claude(SVG_SYSTEM, prompt, max_tokens=4000, model=cfg.claude_model)
             svg = extract_svg(text)
         except RuntimeError:
             svg = None

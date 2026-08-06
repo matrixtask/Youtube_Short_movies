@@ -17,6 +17,11 @@ short_min_sec: 15
 short_max_sec: 59
 quality_threshold: 70     # このスコア未満のショートはレンダリングしない
 
+# 見た目の自己採点（レンダリング後にテロップ・挿絵・サムネをvisionで採点）
+visual_review: true       # false で無効化（API節約したいとき）
+visual_threshold: 70      # この点未満はテロップ調整・挿絵の描き直しで再レンダリング
+visual_max_retries: 2     # 作り直しの上限回数
+
 # チャンネル・編集テイスト
 channel_concept: "中井佑の、とにかく早く移動したい！"
 style_notes: ""           # 編集テイストの指示（例: ツッコミは関西弁で辛口に、など）

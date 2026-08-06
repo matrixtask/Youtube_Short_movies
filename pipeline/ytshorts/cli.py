@@ -18,7 +18,9 @@ import sys
 import time
 from pathlib import Path
 
-from . import compilation, cuts, gasapi, illustrations, planner, pull, render, slackup, subtitles, youtube
+from dataclasses import replace
+
+from . import compilation, cuts, gasapi, illustrations, planner, pull, render, review, slackup, subtitles, youtube
 from .config import CONFIG_FILENAME, Config, load_config
 from .transcribe import all_words, load_or_transcribe, probe_dimensions
 
@@ -150,7 +152,55 @@ def process_video(
         print("[4/4] レンダリング中…")
         render.render_short(video, keep, subs_path, ill_files, out_path, cfg, fit=fit)
 
+        # 見た目の自己採点 → 合格点までテロップ調整・挿絵の描き直しで再レンダリング
+        render_cfg = cfg
+        visual = None
+        if cfg.visual_review:
+            for attempt in range(cfg.visual_max_retries + 1):
+                visual = review.review_short(out_path, out_dur, ill_files, session_dir, cfg)
+                if visual is None:
+                    break  # visionが使えない → 採点なしで続行
+                t, il = visual["telop"], visual["illustration"]
+                ill_txt = "-" if il["score"] is None else f"{il['score']}点"
+                print(f"      見た目採点: テロップ{t['score']}点 / 挿絵{ill_txt}")
+                if review.review_passed(visual, cfg.visual_threshold) or attempt >= cfg.visual_max_retries:
+                    break
+                fixes = []
+                if t["score"] < cfg.visual_threshold and t["action"] != "keep":
+                    style = review.apply_telop_action(style, t["action"])
+                    fixes.append(f"テロップ{t['action']}")
+                if il["score"] is not None and il["score"] < cfg.visual_threshold:
+                    if il["action"] == "smaller":
+                        render_cfg = replace(
+                            render_cfg,
+                            illustration_width=round(render_cfg.illustration_width * 0.75, 3),
+                        )
+                        fixes.append("挿絵を縮小")
+                    elif il["action"] == "regenerate":
+                        ill_pngs = illustrations.generate_illustrations(
+                            short, session_dir / "illustrations", cfg,
+                            critique=il["critique"] or "描画が崩れている",
+                        )
+                        ill_files = []
+                        for ill, png in zip(short["illustrations"], ill_pngs):
+                            if png is None:
+                                continue
+                            start = cuts.map_time(ill["time"], keep)
+                            ill_files.append((png, start, start + ill["duration"]))
+                        fixes.append("挿絵を描き直し")
+                if not fixes:
+                    break  # 自動で直せる指摘がない
+                print(f"      不合格 → 作り直し（{'、'.join(fixes)}）")
+                subs_path.write_text(
+                    subtitles.build_ass(short, keep, cfg.width, cfg.height,
+                                        layout="fit" if fit else "crop", **style),
+                    encoding="utf-8",
+                )
+                render.render_short(video, keep, subs_path, ill_files, out_path,
+                                    render_cfg, fit=fit)
+
         # 横型ソースなら、まとめ動画・ロング動画用に16:9ワイド版も作る
+        # （採点で調整済みの最終スタイル・挿絵をそのまま使う）
         wide_name = ""
         if cfg.wide_enabled and landscape:
             wide_name = f"{video.stem}_{short['id']}_wide.mp4"
@@ -160,17 +210,28 @@ def process_video(
             )
             print("      16:9ワイド版もレンダリング中…")
             render.render_short(video, keep, wide_subs, ill_files,
-                                cfg.shorts_dir / wide_name, cfg, size=(1920, 1080))
+                                cfg.shorts_dir / wide_name, render_cfg, size=(1920, 1080))
 
-        # ダッシュボード用のサムネ（レンダリング直後に1フレーム抜いてシートへ保存する）
+        # ダッシュボード用のサムネ（候補フレームを採点して一番良いものを採用）
+        thumb_at = 1.0
+        if cfg.visual_review and visual is not None:
+            thumb_at = review.best_thumbnail_time(out_path, out_dur, session_dir, cfg)
         thumb = render.make_thumbnail_data_uri(
-            out_path, session_dir / f"{short['id']}_thumb.jpg"
+            out_path, session_dir / f"{short['id']}_thumb.jpg", at=thumb_at
         )
+
+        visual_score = ""
+        if visual:
+            scores = [visual["telop"]["score"]]
+            if visual["illustration"]["score"] is not None:
+                scores.append(visual["illustration"]["score"])
+            visual_score = str(min(scores))
 
         made.append({
             "file": out_name,
             "wide_file": wide_name,
             "thumb": thumb,
+            "visual_score": visual_score,
             "session": video.stem,
             "short_id": short["id"],
             "title": short["title"],
@@ -301,6 +362,7 @@ def share_shorts_to_slack(cfg: Config, token: str, channel: str, video: dict, ma
                     "kind": kind,
                     # サムネはダッシュボードに出す縦型ショートのぶんだけ保存する
                     "thumb": m.get("thumb", "") if kind == "short" else "",
+                    "visual_score": m.get("visual_score", ""),
                 })
                 if kind == "short":
                     shared += 1

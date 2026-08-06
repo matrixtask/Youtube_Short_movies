@@ -2,24 +2,38 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 API_URL = "https://api.anthropic.com/v1/messages"
 
 
-def ask_claude(system: str, user: str, max_tokens: int = 4000, model: str = "claude-sonnet-5") -> str:
+def _image_block(path: Path) -> dict:
+    suffix = Path(path).suffix.lower()
+    media = "image/png" if suffix == ".png" else "image/jpeg"
+    data = base64.b64encode(Path(path).read_bytes()).decode("ascii")
+    return {"type": "image", "source": {"type": "base64", "media_type": media, "data": data}}
+
+
+def ask_claude(system: str, user: str, max_tokens: int = 4000,
+               model: str = "claude-sonnet-5", images: list | None = None) -> str:
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         raise RuntimeError("環境変数 ANTHROPIC_API_KEY が未設定です")
+    if images:
+        content = [_image_block(p) for p in images] + [{"type": "text", "text": user}]
+    else:
+        content = user
     payload = {
         "model": model,
         "max_tokens": max_tokens,
         "system": system,
-        "messages": [{"role": "user", "content": user}],
+        "messages": [{"role": "user", "content": content}],
     }
     req = urllib.request.Request(
         API_URL,
@@ -60,11 +74,12 @@ def parse_json_loose(text: str):
     return json.loads(s[start : end + 1])
 
 
-def ask_claude_json(system: str, user: str, max_tokens: int = 4000, model: str = "claude-sonnet-5"):
+def ask_claude_json(system: str, user: str, max_tokens: int = 4000,
+                    model: str = "claude-sonnet-5", images: list | None = None):
     """JSONを返させる呼び出し。パース失敗時は1回だけリトライ。"""
     suffix = "\n\n出力はJSONのみ。前置きや説明は書かない。"
     for attempt in range(2):
-        text = ask_claude(system, user + suffix, max_tokens, model)
+        text = ask_claude(system, user + suffix, max_tokens, model, images=images)
         try:
             return parse_json_loose(text)
         except (ValueError, json.JSONDecodeError):
