@@ -18,6 +18,11 @@ function doGet(e) {
       .setMimeType(ContentService.MimeType.JSON);
   }
 
+  // ブラウザ用ダッシュボード（承認待ち・投稿予約・動画キューの一覧と操作）
+  if (p.page === 'dash' || p.action === 'dash') {
+    return renderDashboard(p.token);
+  }
+
   // ローカル開発機へ設定を配る（ALLOW_ENV_EXPORT=true のときだけ有効）
   // 許可リストのプロパティだけを返す。使い終わったらフラグを消すこと。
   if (p.action === 'env') {

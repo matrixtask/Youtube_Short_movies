@@ -58,6 +58,15 @@ function readTable(sheetName) {
   var values = sheet.getDataRange().getValues();
   if (values.length < 2) return [];
   var headers = values[0].map(String);
+  // 書き込みは SHEET_HEADERS の列位置で行うため、シートのヘッダー行が古いと
+  // 新しい列（instructions 等）が読めず黙って空扱いになる。ここで自動同期する
+  var expected = SHEET_HEADERS[sheetName];
+  if (expected && JSON.stringify(headers.slice(0, expected.length)) !== JSON.stringify(expected)) {
+    sheet.getRange(1, 1, 1, expected.length).setValues([expected]);
+    sheet.getRange(1, 1, sheet.getMaxRows(), expected.length).setNumberFormat('@');
+    headers = expected.slice();
+    console.log('headers synced: ' + sheetName);
+  }
   var rows = [];
   for (var i = 1; i < values.length; i++) {
     if (values[i].every(function (c) { return c === '' || c === null; })) continue;

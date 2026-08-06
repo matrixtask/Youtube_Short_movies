@@ -6,6 +6,7 @@
 #   make gas-push     GASへコードを反映（clasp push）
 #   make gas-deploy   GASへ反映 + Webアプリを再デプロイ（URLは変わらない）
 #   make gas-open     GASエディタをブラウザで開く
+#   make dash         承認・投稿状況のダッシュボードをブラウザで開く
 #   make pull         Slackの新着動画を取り込んで処理（1回）
 #   make watch        同上を常駐（5分間隔）
 #   make run          workspace/inbox の動画を処理（手動モード）
@@ -22,7 +23,7 @@ export
 
 VENV := pipeline/.venv/bin
 
-.PHONY: help setup env-pull gas-link gas-push gas-deploy gas-open pull watch run publish compile list gpu-check test
+.PHONY: help setup env-pull gas-link gas-push gas-deploy gas-open dash pull watch run publish compile list gpu-check test
 
 help:
 	@grep -E '^#   make' Makefile | sed 's/^#   //'
@@ -45,6 +46,11 @@ gas-deploy: gas-push
 
 gas-open:
 	cd gas && (clasp open-script 2>/dev/null || clasp open)
+
+dash:
+	@[ -n "$(YTSHORTS_GAS_WEBAPP_URL)" ] && [ -n "$(GAS_ADMIN_TOKEN)" ] || { echo "✗ .env に YTSHORTS_GAS_WEBAPP_URL / GAS_ADMIN_TOKEN が必要です（make env-pull）"; exit 1; }
+	@URL="$(YTSHORTS_GAS_WEBAPP_URL)?token=$(GAS_ADMIN_TOKEN)&page=dash"; \
+	xdg-open "$$URL" 2>/dev/null || open "$$URL" 2>/dev/null || echo "ブラウザでこのURLを開いてください:\n$$URL"
 
 pull:
 	cd pipeline && $(CURDIR)/$(VENV)/ytshorts pull
