@@ -140,6 +140,12 @@ function collectRecentNotes(limit) {
  * Slackスレッドへの返信を処理する（doPost から呼ばれる）。
  */
 function handleScriptReply(threadTs, text) {
+  var trimmed = String(text || '').trim();
+
+  // コマンドは台本の有無に関係なく効かせる（フリートーク動画のスレッドなど）
+  if (handleApprovalCommand(trimmed)) return true;
+  if (handleReeditCommand(threadTs, trimmed)) return true;
+
   var rows = readTable(SHEET.SCRIPTS).filter(function (r) {
     return slackTsEqual(r.thread_ts, threadTs);
   });
@@ -149,12 +155,6 @@ function handleScriptReply(threadTs, text) {
   }
   var script = rows[rows.length - 1];
   var scriptId = String(script.script_id);
-  var trimmed = String(text || '').trim();
-
-  // スレッド内での「承認 xxxx」「却下 xxxx」も受け付ける
-  if (handleApprovalCommand(trimmed)) return true;
-  // 「再編集 <指示>」→ その動画を新しい指示で編集し直す
-  if (handleReeditCommand(threadTs, trimmed)) return true;
 
   if (/^(リテイク|作り直し|retake)$/i.test(trimmed)) {
     updateRowsWhere(SHEET.SCRIPTS, 'script_id', scriptId, { status: SCRIPT_STATUS.EXPIRED });

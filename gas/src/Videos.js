@@ -95,7 +95,11 @@ function handleReeditCommand(threadTs, text) {
   var videos = readTable(SHEET.VIDEOS).filter(function (r) {
     return slackTsEqual(r.thread_ts, threadTs);
   });
-  if (!videos.length) return false;
+  if (!videos.length) {
+    // 無反応だと「通ってるのか分からない」ので、対象がない場合も必ず返事する
+    sendSlack(':warning: このスレッドで受け取った動画が見つかりません。動画を投稿したスレッドで「再編集 <指示>」と返信してください。', threadTs);
+    return true;
+  }
 
   var target = videos[videos.length - 1];
   var token = body.split(/\s+/)[0];
@@ -206,11 +210,34 @@ function claimPendingVideos(worker) {
     });
     if (claimed.length) {
       logEvent('claim', claimed.length + '本 by ' + (worker || 'unknown'));
+      notifyClaimStart(claimed, worker);
     }
     return claimed;
   } finally {
     lock.releaseLock();
   }
+}
+
+/**
+ * 確保した動画のスレッドに「編集を開始した」ことを知らせる。
+ * 再編集の指示が拾われたか・どのマシンが処理中かを見えるようにする。
+ */
+function notifyClaimStart(claimed, worker) {
+  var byThread = {};
+  claimed.forEach(function (v) {
+    if (!v.thread_ts) return;
+    (byThread[v.thread_ts] = byThread[v.thread_ts] || []).push(v);
+  });
+  Object.keys(byThread).forEach(function (ts) {
+    var lines = byThread[ts].map(function (v) {
+      return '• ' + v.file_name + (v.reprocess ? '（再編集: ' + (v.instructions || '指示なし') + '）' : '');
+    });
+    notifySlack(
+      ':gear: 編集を開始しました（' + String(worker || 'unknown') + '）\n' + lines.join('\n') +
+      '\n終わったらこのスレッドに結果を返します。',
+      ts
+    );
+  });
 }
 
 /**
