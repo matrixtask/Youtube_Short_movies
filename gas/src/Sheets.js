@@ -6,8 +6,9 @@ var SHEET_HEADERS = {
   Scripts: ['script_id', 'created_at', 'thread_ts', 'themes', 'status', 'shot_at', 'processed_at', 'note'],
   Questions: ['script_id', 'idx', 'theme', 'category', 'question', 'neta', 'hint'],
   Videos: ['video_id', 'created_at', 'script_id', 'thread_ts', 'file_id', 'file_name', 'url_private', 'size', 'status', 'processed_at', 'claimed_at', 'claimed_by', 'instructions'],
-  Shorts: ['short_id', 'created_at', 'video_id', 'script_id', 'title', 'score', 'duration', 'slack_file_id', 'url_private', 'status', 'scheduled_at', 'youtube_url', 'published_at', 'kind', 'question_idx', 'thumb'],
+  Shorts: ['short_id', 'created_at', 'video_id', 'script_id', 'title', 'score', 'duration', 'slack_file_id', 'url_private', 'status', 'scheduled_at', 'youtube_url', 'published_at', 'kind', 'question_idx', 'thumb', 'views', 'likes', 'stats_at'],
   Themes: ['theme', 'category', 'weight', 'last_used', 'notes', 'hits', 'misses'],
+  Insights: ['created_at', 'kind', 'text'],
   Log: ['timestamp', 'event', 'detail'],
 };
 
@@ -17,6 +18,14 @@ function ss() {
 
 function getSheet(name) {
   var sheet = ss().getSheetByName(name);
+  if (!sheet && SHEET_HEADERS[name]) {
+    // 後から追加されたシート（Insights等）は手動セットアップなしで自動作成する
+    var headers = SHEET_HEADERS[name];
+    sheet = ss().insertSheet(name);
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sheet.setFrozenRows(1);
+    sheet.getRange(1, 1, sheet.getMaxRows(), headers.length).setNumberFormat('@');
+  }
   if (!sheet) throw new Error('シートがありません: ' + name + '（setupSpreadsheet() を実行してください）');
   return sheet;
 }

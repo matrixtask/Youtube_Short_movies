@@ -50,11 +50,16 @@ def build_planner_prompt(
     cfg: Config,
     script_questions: list[dict] | None,
     instructions: str = "",
+    insights: str = "",
 ) -> str:
     parts = []
     if instructions.strip():
         parts.append("この動画への編集指示（撮影者本人から。最優先で従う）:")
         parts.append(instructions.strip())
+        parts.append("")
+    if insights.strip():
+        parts.append("過去の再生実績の自己分析からの修正方針（構成・切り口に反映する）:")
+        parts.append(insights.strip())
         parts.append("")
     if script_questions:
         parts.append("この動画は以下の質問に答えたものです（台本）:")
@@ -99,10 +104,11 @@ def generate_plan(
     cfg: Config,
     script_questions: list[dict] | None = None,
     instructions: str = "",
+    insights: str = "",
 ) -> dict:
     raw = ask_claude_json(
         build_planner_system(cfg),
-        build_planner_prompt(transcript, cfg, script_questions, instructions),
+        build_planner_prompt(transcript, cfg, script_questions, instructions, insights),
         max_tokens=16000,
         model=cfg.claude_model,
     )
@@ -199,11 +205,12 @@ def normalize_plan(plan: dict, duration: float) -> dict:
 
 
 def load_or_generate_plan(
-    transcript: dict, session_dir, cfg: Config, script_questions=None, instructions: str = ""
+    transcript: dict, session_dir, cfg: Config, script_questions=None,
+    instructions: str = "", insights: str = "",
 ) -> dict:
     path = session_dir / "plan.json"
     if path.exists():
         return json.loads(path.read_text(encoding="utf-8"))
-    plan = generate_plan(transcript, cfg, script_questions, instructions)
+    plan = generate_plan(transcript, cfg, script_questions, instructions, insights)
     path.write_text(json.dumps(plan, ensure_ascii=False, indent=1), encoding="utf-8")
     return plan

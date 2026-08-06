@@ -71,7 +71,7 @@ def claim_pending_videos(cfg: Config, worker: str) -> dict:
     戻り値: {"channel": 通知先チャンネルID, "videos": [...]}
     各動画: {video_id, script_id, thread_ts, file_id, file_name, url_private, size, questions}
     """
-    empty = {"channel": "", "videos": []}
+    empty = {"channel": "", "videos": [], "insights": ""}
     if not cfg.gas_webapp_url or not cfg.gas_admin_token:
         print("⚠ gas_webapp_url / GAS_ADMIN_TOKEN が未設定です", file=sys.stderr)
         return empty
@@ -92,7 +92,12 @@ def claim_pending_videos(cfg: Config, worker: str) -> dict:
     if not data.get("ok"):
         print(f"⚠ GASがエラーを返しました: {data.get('error')}", file=sys.stderr)
         return empty
-    return {"channel": data.get("channel", ""), "videos": data.get("videos") or []}
+    return {
+        "channel": data.get("channel", ""),
+        "videos": data.get("videos") or [],
+        # 自己分析の修正方針（構成づくりに反映する。無ければ空）
+        "insights": str(data.get("insights") or ""),
+    }
 
 
 def fetch_shorts(cfg: Config) -> dict:

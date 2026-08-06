@@ -64,7 +64,7 @@ def find_inbox_videos(cfg: Config) -> list[Path]:
 
 def process_video(
     video: Path, cfg: Config, script: dict | None, force: bool,
-    instructions: str = "", replan: bool = False,
+    instructions: str = "", replan: bool = False, insights: str = "",
 ) -> list[dict]:
     """1本の撮りっぱなし動画からショートを量産する。生成したindexエントリを返す。
 
@@ -87,7 +87,8 @@ def process_video(
     if instructions.strip():
         print(f"      編集指示: {instructions.strip()[:80]}")
     questions = script.get("questions") if script else None
-    plan = planner.load_or_generate_plan(transcript, session_dir, cfg, questions, instructions)
+    plan = planner.load_or_generate_plan(transcript, session_dir, cfg, questions,
+                                         instructions, insights)
     shorts = plan["shorts"]
     print(f"      {len(shorts)}本のショート候補（品質ゲート: {cfg.quality_threshold}点）")
 
@@ -255,7 +256,8 @@ def pull_once(cfg: Config) -> int:
             script = {"script_id": v.get("script_id") or None, "questions": v.get("questions") or []}
             made = process_video(dest, cfg, script if script["questions"] else None,
                                  force=False, instructions=v.get("instructions", ""),
-                                 replan=bool(v.get("reprocess")))
+                                 replan=bool(v.get("reprocess")),
+                                 insights=pending.get("insights", ""))
             index.extend(made)
             save_index(cfg, index)
             shared = share_shorts_to_slack(cfg, token, channel, v, made)

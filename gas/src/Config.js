@@ -32,6 +32,7 @@ var SHEET = {
   VIDEOS: 'Videos', // Slackに投げられた撮影動画の処理キュー
   SHORTS: 'Shorts', // 生成済みショートの台帳（実体はSlack上のファイル）
   THEMES: 'Themes',
+  INSIGHTS: 'Insights', // 自己分析の所見と修正方針の履歴
   LOG: 'Log',
 };
 

@@ -111,6 +111,11 @@ function generateShootQuestions(themes, count, recentNotes) {
     system += '\n\n話し手の傾向（撮影実績からの学習。最重要）:\n' + insights +
       '\n喋りにくい傾向に当たる質問は、喋りやすい傾向側の切り口に言い換えて出題する。';
   }
+  // 再生実績からの自己分析（runSelfReview が毎週更新）を質問・ネタづくりに反映する
+  var fixes = getProp('SCRIPT_INSIGHTS');
+  if (fixes) {
+    system += '\n\n自己分析からの修正方針（質問とネタに必ず反映する）:\n' + fixes;
+  }
   var user = [
     '今日のテーマ:',
     themes.map(function (t) { return '- ' + t.theme + '（カテゴリ: ' + t.category + (t.notes ? ' / メモ: ' + t.notes : '') + '）'; }).join('\n'),

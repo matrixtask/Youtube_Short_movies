@@ -26,6 +26,18 @@ function dashApprove(token, code, approve) {
   return approve ? '承認しました' : '却下しました';
 }
 
+/** ダッシュボードからの再生数更新 */
+function dashSyncStats(token) {
+  requireDashToken(token);
+  return syncYoutubeStats();
+}
+
+/** ダッシュボードからの自己分析実行 */
+function dashRunReview(token) {
+  requireDashToken(token);
+  return runSelfReview();
+}
+
 /** ダッシュボードからの再編集指示（Slackの「再編集 <指示>」と同じ処理） */
 function dashReedit(token, videoId, body) {
   requireDashToken(token);
@@ -163,6 +175,7 @@ function renderDashboard(token) {
     '<button class="tabbtn" id="tab-queue" onclick="show(\'queue\')">📅投稿予約<br>' + (approved.length + scheduled.length) + '</button>',
     '<button class="tabbtn" id="tab-pub" onclick="show(\'pub\')">📺投稿済み<br>' + published.length + '</button>',
     '<button class="tabbtn" id="tab-vid" onclick="show(\'vid\')">🎥動画<br>' + recentVideos.length + '</button>',
+    '<button class="tabbtn" id="tab-ana" onclick="show(\'ana\')">📊分析<br>&nbsp;</button>',
     '</div>'
   );
 
@@ -223,6 +236,56 @@ function renderDashboard(token) {
   });
   html.push('</div>');
 
+  // 📊 分析（再生ランキング・修正の方向性・テーマ成績）
+  var insightRows = readTable(SHEET.INSIGHTS).reverse().slice(0, 12);
+  var ranked = notWide.filter(function (r) { return String(r.status) === SHORT_STATUS.PUBLISHED; })
+    .sort(function (a, b) { return (Number(b.views) || 0) - (Number(a.views) || 0); })
+    .slice(0, 10);
+  var themes = readTable(SHEET.THEMES)
+    .sort(function (a, b) { return (Number(b.weight) || 0) - (Number(a.weight) || 0); });
+  var INSIGHT_LABEL = { insight: '所見', fix_question: '質問の修正', fix_neta: 'ネタの修正', fix_structure: '構成の修正' };
+
+  html.push('<div class="sec" id="sec-ana">');
+  html.push(
+    '<div class="card"><div class="body">',
+    '<button class="rb" onclick="runjob(\'dashSyncStats\')">▶ 再生数を更新</button>',
+    '<button class="rb" onclick="runjob(\'dashRunReview\')">▶ 自己分析を実行</button>',
+    '<div class="meta" style="margin-top:6px">毎週月曜にも自動実行されます。分析結果は次回の台本の質問・ネタと、編集プランの構成に自動反映されます。</div>',
+    '</div></div>'
+  );
+
+  html.push('<h2 style="font-size:15px;margin:16px 4px 8px;color:#ffe600">🧭 修正の方向性（自己分析の履歴）</h2>');
+  if (!insightRows.length) html.push('<div class="empty">まだ分析がありません。「自己分析を実行」を押してください</div>');
+  insightRows.forEach(function (r) {
+    var kind = String(r.kind);
+    html.push('<div class="card"><div class="body">',
+      '<div class="meta"><span class="badge', kind === 'insight' ? '' : ' done', '">',
+      escapeHtml(INSIGHT_LABEL[kind] || kind), '</span>', escapeHtml(r.created_at), '</div>',
+      '<div>', escapeHtml(r.text), '</div></div></div>');
+  });
+
+  html.push('<h2 style="font-size:15px;margin:16px 4px 8px;color:#ffe600">📈 再生ランキング</h2>');
+  if (!ranked.length) html.push('<div class="empty">再生データがまだありません（投稿後「再生数を更新」で取得）</div>');
+  ranked.forEach(function (r, i) {
+    html.push(dashCard(r.slack_file_id,
+      '<div class="title">' + (i + 1) + '位 ' + escapeHtml(r.title) + '</div>' +
+      '<div class="meta">▶ ' + escapeHtml(r.views || '0') + '回 / 👍 ' + escapeHtml(r.likes || '0') +
+      ' / スコア' + escapeHtml(r.score) + '点 / ' + escapeHtml(r.published_at) + '</div>', r.thumb));
+  });
+
+  html.push('<h2 style="font-size:15px;margin:16px 4px 8px;color:#ffe600">🎯 テーマ成績（重み順）</h2>');
+  themes.slice(0, 10).forEach(function (t) {
+    html.push('<div class="card"><div class="body"><div class="title">', escapeHtml(t.theme), '</div>',
+      '<div class="meta">重み ', escapeHtml(t.weight), ' / 喋れた ', escapeHtml(t.hits || 0),
+      ' / 飛ばした ', escapeHtml(t.misses || 0), '</div></div></div>');
+  });
+  var suspended = themes.filter(function (t) { return !(Number(t.weight) > 0); });
+  if (suspended.length) {
+    html.push('<div class="empty">休止中（重み0）: ' +
+      suspended.map(function (t) { return escapeHtml(t.theme); }).join(' / ') + '</div>');
+  }
+  html.push('</div>');
+
   html.push(
     '<div id="toast"></div>',
     '<script>',
@@ -233,9 +296,13 @@ function renderDashboard(token) {
     'document.getElementById("sec-"+id).classList.add("active");',
     'document.getElementById("tab-"+id).classList.add("active");',
     'location.hash=id}',
-    'show(["stock","queue","pub","vid"].indexOf(location.hash.slice(1))>=0?location.hash.slice(1):"stock");',
-    'function toast(m){var t=document.getElementById("toast");t.textContent=m;t.style.display="block";',
-    'setTimeout(function(){location.reload()},1500)}',
+    'show(["stock","queue","pub","vid","ana"].indexOf(location.hash.slice(1))>=0?location.hash.slice(1):"stock");',
+    'function say(m){var t=document.getElementById("toast");t.style.background="#2b6e3f";',
+    't.textContent=m;t.style.display="block";return t}',
+    'function toast(m){say(m);setTimeout(function(){location.reload()},1500)}',
+    'function runjob(fn){say("実行中…（分析は1分ほどかかることがあります）");',
+    'google.script.run.withSuccessHandler(function(m){say(m);',
+    'setTimeout(function(){location.reload()},4000)}).withFailureHandler(fail)[fn](TOKEN)}',
     'function fail(e){var t=document.getElementById("toast");t.textContent="エラー: "+e.message;',
     't.style.background="#8a2b2b";t.style.display="block"}',
     'function approve(code,ok){if(!ok&&!confirm("却下しますか？"))return;',

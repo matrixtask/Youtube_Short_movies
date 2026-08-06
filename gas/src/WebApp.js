@@ -134,6 +134,8 @@ function doPost(e) {
       ok: true,
       channel: String(getProp('SLACK_CHANNEL_ID') || ''),
       videos: claimPendingVideos(payload.worker),
+      // 自己分析の修正方針。パイプラインが編集プラン（構成）に反映する
+      insights: String(getProp('SCRIPT_INSIGHTS') || ''),
     })).setMimeType(ContentService.MimeType.JSON);
   }
 

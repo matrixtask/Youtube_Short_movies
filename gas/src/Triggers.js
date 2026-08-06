@@ -50,6 +50,17 @@ function weeklyDigest() {
   } catch (e) {
     logEvent('theme_tuning_error', String(e));
   }
+  // 再生数の取り込みと、質問・ネタ・構成の自己反省的な見直し
+  try {
+    lines.push('', syncYoutubeStats());
+  } catch (e) {
+    logEvent('yt_stats_error', String(e));
+  }
+  try {
+    lines.push('', runSelfReview());
+  } catch (e) {
+    logEvent('self_review_error', String(e));
+  }
   if ((counts[SCRIPT_STATUS.SHOT] || 0) > 0) {
     lines.push(':warning: 撮影済みで取り込んでいない動画があります。inbox に入れて `ytshorts run` を実行してください。');
   }

@@ -1,4 +1,24 @@
-from ytshorts.planner import normalize_plan
+from ytshorts.config import Config
+from ytshorts.planner import build_planner_prompt, normalize_plan
+
+
+class TestPlannerPrompt:
+    transcript = {"duration": 60.0, "segments": []}
+
+    def test_insights_included(self):
+        prompt = build_planner_prompt(self.transcript, Config(), None,
+                                      insights="【構成】冒頭3秒で数字を出す")
+        assert "修正方針" in prompt
+        assert "【構成】冒頭3秒で数字を出す" in prompt
+
+    def test_instructions_take_priority_position(self):
+        prompt = build_planner_prompt(self.transcript, Config(), None,
+                                      instructions="挿絵なしで", insights="【構成】短く")
+        assert prompt.index("挿絵なしで") < prompt.index("【構成】短く")
+
+    def test_empty_insights_omitted(self):
+        prompt = build_planner_prompt(self.transcript, Config(), None)
+        assert "修正方針" not in prompt
 
 
 def make_short(**over):
