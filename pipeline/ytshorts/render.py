@@ -6,6 +6,7 @@ filter_complex の組み立ては純粋関数（テスト対象）、実行は s
 
 from __future__ import annotations
 
+import base64
 import subprocess
 from pathlib import Path
 
@@ -131,6 +132,35 @@ def build_short_command(
         str(out_path),
     ]
     return cmd
+
+
+def build_thumb_command(video: Path, out_path: Path, width: int = 160, at: float = 1.0) -> list[str]:
+    """ショートから1フレーム抜いて小さいJPEGを作るffmpegコマンド（純粋）。"""
+    return [
+        "ffmpeg", "-y", "-ss", f"{at:g}", "-i", str(video),
+        "-frames:v", "1", "-vf", f"scale={width}:-2", "-q:v", "7",
+        str(out_path),
+    ]
+
+
+def make_thumbnail_data_uri(video: Path, out_path: Path, width: int = 160,
+                            at: float = 1.0, max_bytes: int = 33000) -> str:
+    """ショートのサムネを data URI で返す（ダッシュボード用にシートへ保存する）。
+
+    スプレッドシートのセル上限（5万文字）に収まるサイズだけ返し、
+    失敗時・大きすぎる場合は空文字（Slackサムネへのフォールバックに任せる）。
+    """
+    try:
+        proc = subprocess.run(build_thumb_command(video, out_path, width, at),
+                              capture_output=True)
+        if proc.returncode != 0 or not out_path.exists():
+            return ""
+        data = out_path.read_bytes()
+        if not data or len(data) > max_bytes:
+            return ""
+        return "data:image/jpeg;base64," + base64.b64encode(data).decode("ascii")
+    except Exception:
+        return ""
 
 
 def render_short(

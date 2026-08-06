@@ -102,9 +102,18 @@ var DASH_VIDEO_LABEL = {
   failed: '失敗',
 };
 
-/** サムネ付きカード。body は中身のHTML（エスケープ済みで渡す） */
-function dashCard(fileId, body) {
-  var thumb = slackThumbDataUri(fileId);
+/** パイプラインが送ってきたサムネの検証（壊れた値や巨大な値はセルに入れない） */
+function dashSafeThumb(thumb) {
+  var t = String(thumb || '');
+  return t.indexOf('data:image/') === 0 && t.length < 49000 ? t : '';
+}
+
+/**
+ * サムネ付きカード。body は中身のHTML（エスケープ済みで渡す）。
+ * thumb（シート保存のdata URI）があれば即表示、無ければSlackサムネにフォールバック。
+ */
+function dashCard(fileId, body, thumb) {
+  thumb = dashSafeThumb(thumb) || slackThumbDataUri(fileId);
   return '<div class="card">' +
     (thumb ? '<img class="thumb" src="' + thumb + '" alt="">' : '<div class="thumb noimg">🎬</div>') +
     '<div class="body">' + body + '</div></div>';
@@ -162,12 +171,12 @@ function renderDashboard(token) {
   if (!stock.length) html.push('<div class="empty">承認待ちはありません</div>');
   stock.forEach(function (r) {
     var code = shortCode(r.short_id);
-    html.push(dashCard(r.slack_file_id,
+    html.push(dashCard(r.slack_file_id, 
       '<div class="title">' + escapeHtml(r.title) + '</div>' +
       '<div class="meta">コード ' + escapeHtml(code) + ' / ' + escapeHtml(r.score) + '点 / ' +
       escapeHtml(r.duration) + '秒 / ' + escapeHtml(r.created_at) + '</div>' +
       '<button class="ok" onclick="approve(\'' + escapeHtml(code) + '\',true)">承認</button>' +
-      '<button class="ng" onclick="approve(\'' + escapeHtml(code) + '\',false)">却下</button>'));
+      '<button class="ng" onclick="approve(\'' + escapeHtml(code) + '\',false)">却下</button>', r.thumb));
   });
   html.push('</div>');
 
@@ -175,14 +184,14 @@ function renderDashboard(token) {
   html.push('<div class="sec" id="sec-queue">');
   if (!approved.length && !scheduled.length) html.push('<div class="empty">予約はありません</div>');
   scheduled.forEach(function (r) {
-    html.push(dashCard(r.slack_file_id,
+    html.push(dashCard(r.slack_file_id, 
       '<div class="title">' + escapeHtml(r.title) + '</div>' +
-      '<div class="meta">🕐 ' + escapeHtml(r.scheduled_at) + ' に投稿予定（' + escapeHtml(r.score) + '点）</div>'));
+      '<div class="meta">🕐 ' + escapeHtml(r.scheduled_at) + ' に投稿予定（' + escapeHtml(r.score) + '点）</div>', r.thumb));
   });
   approved.forEach(function (r) {
-    html.push(dashCard(r.slack_file_id,
+    html.push(dashCard(r.slack_file_id, 
       '<div class="title">' + escapeHtml(r.title) + '</div>' +
-      '<div class="meta">承認済み・次の毎時処理で投稿枠を割当て（' + escapeHtml(r.score) + '点）</div>'));
+      '<div class="meta">承認済み・次の毎時処理で投稿枠を割当て（' + escapeHtml(r.score) + '点）</div>', r.thumb));
   });
   html.push('</div>');
 
@@ -190,11 +199,11 @@ function renderDashboard(token) {
   html.push('<div class="sec" id="sec-pub">');
   if (!published.length) html.push('<div class="empty">まだ投稿はありません</div>');
   published.forEach(function (r) {
-    html.push(dashCard(r.slack_file_id,
+    html.push(dashCard(r.slack_file_id, 
       '<div class="title">' + escapeHtml(r.title) + '</div>' +
       '<div class="meta">' + escapeHtml(r.published_at) + '</div>' +
       '<div class="meta"><a href="' + escapeHtml(r.youtube_url) + '" target="_blank">' +
-      escapeHtml(r.youtube_url) + '</a></div>'));
+      escapeHtml(r.youtube_url) + '</a></div>', r.thumb));
   });
   html.push('</div>');
 

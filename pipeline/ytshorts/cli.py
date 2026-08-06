@@ -161,9 +161,15 @@ def process_video(
             render.render_short(video, keep, wide_subs, ill_files,
                                 cfg.shorts_dir / wide_name, cfg, size=(1920, 1080))
 
+        # ダッシュボード用のサムネ（レンダリング直後に1フレーム抜いてシートへ保存する）
+        thumb = render.make_thumbnail_data_uri(
+            out_path, session_dir / f"{short['id']}_thumb.jpg"
+        )
+
         made.append({
             "file": out_name,
             "wide_file": wide_name,
+            "thumb": thumb,
             "session": video.stem,
             "short_id": short["id"],
             "title": short["title"],
@@ -291,6 +297,8 @@ def share_shorts_to_slack(cfg: Config, token: str, channel: str, video: dict, ma
                     "slack_file_id": info["id"],
                     "url_private": info["url_private"],
                     "kind": kind,
+                    # サムネはダッシュボードに出す縦型ショートのぶんだけ保存する
+                    "thumb": m.get("thumb", "") if kind == "short" else "",
                 })
                 if kind == "short":
                     shared += 1

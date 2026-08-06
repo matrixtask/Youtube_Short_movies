@@ -341,6 +341,7 @@ function registerShort(payload) {
     published_at: '',
     kind: kind,
     question_idx: String(payload.question_idx || 0),
+    thumb: dashSafeThumb(payload.thumb),
   });
   // 承認依頼（YouTubeショート投稿）は縦版のみ。ワイド版はまとめ用の素材
   if (kind !== 'wide') {

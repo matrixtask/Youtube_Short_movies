@@ -3,7 +3,14 @@ from pathlib import Path
 import pytest
 
 from ytshorts.config import Config
-from ytshorts.render import band_color_arg, build_filter_complex, build_short_command, escape_filter_path
+from ytshorts.render import (
+    band_color_arg,
+    build_filter_complex,
+    build_short_command,
+    build_thumb_command,
+    escape_filter_path,
+    make_thumbnail_data_uri,
+)
 
 
 class TestFitLayout:
@@ -40,6 +47,38 @@ class TestFitLayout:
         fc = build_filter_complex([(0.0, 10.0)], None, [(1, 3.0, 6.0)],
                                   width=1920, height=1080, ill_width=0.55)
         assert "[1:v]scale=594:-1[ill0]" in fc      # 短辺=1080 の55%（横型でもはみ出さない）
+
+
+class TestThumbnail:
+    def test_thumb_command(self):
+        cmd = build_thumb_command(Path("short.mp4"), Path("thumb.jpg"))
+        assert cmd[:5] == ["ffmpeg", "-y", "-ss", "1", "-i"]
+        assert "scale=160:-2" in cmd
+        assert cmd[-1] == "thumb.jpg"
+
+    @staticmethod
+    def _stub_ffmpeg(monkeypatch):
+        monkeypatch.setattr(
+            "ytshorts.render.subprocess.run",
+            lambda *a, **k: type("P", (), {"returncode": 0})(),
+        )
+
+    def test_small_thumb_returns_data_uri(self, tmp_path, monkeypatch):
+        self._stub_ffmpeg(monkeypatch)
+        out = tmp_path / "t.jpg"
+        out.write_bytes(b"\xff\xd8tiny")
+        uri = make_thumbnail_data_uri(tmp_path / "v.mp4", out)
+        assert uri.startswith("data:image/jpeg;base64,")
+
+    def test_oversized_thumb_dropped(self, tmp_path, monkeypatch):
+        # セル上限を超えるサムネは保存せず、Slackフォールバックに任せる
+        self._stub_ffmpeg(monkeypatch)
+        out = tmp_path / "t.jpg"
+        out.write_bytes(b"x" * 40000)
+        assert make_thumbnail_data_uri(tmp_path / "v.mp4", out, max_bytes=33000) == ""
+
+    def test_ffmpeg_failure_returns_empty(self, tmp_path):
+        assert make_thumbnail_data_uri(tmp_path / "no.mp4", tmp_path / "t.jpg") == ""
 
 
 class TestEscapeFilterPath:
