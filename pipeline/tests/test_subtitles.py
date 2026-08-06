@@ -41,6 +41,28 @@ class TestBuildAssHeader:
         assert ",90," in header                        # フォントサイズ
 
 
+class TestTextSide:
+    # width=1080 の側方余白: round(1080*0.45)=486。反対側は60
+    def test_center_is_default(self):
+        header = build_ass_header(1080, 1920)
+        assert ",2,60,60," in header  # Caption: 下部中央
+        assert ",8,60,60," in header  # Hook/Tsukkomi/Title: 上部中央
+
+    def test_left_confines_text_to_left(self):
+        header = build_ass_header(1080, 1920, text_side="left")
+        assert ",1,60,486," in header  # Caption: 左下、右45%を空ける
+        assert ",7,60,486," in header  # 上部スタイルも左寄せ
+
+    def test_right_confines_text_to_right(self):
+        header = build_ass_header(1080, 1920, text_side="right")
+        assert ",3,486,60," in header
+        assert ",9,486,60," in header
+
+    def test_side_margin_scales_with_width(self):
+        header = build_ass_header(1920, 1080, text_side="left")
+        assert ",1,60,864," in header  # round(1920*0.45)=864
+
+
 class TestFormatAssTime:
     def test_zero(self):
         assert format_ass_time(0) == "0:00:00.00"

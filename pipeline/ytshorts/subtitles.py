@@ -44,13 +44,27 @@ def build_ass_header(
     caption_margin: float = 0.177,
     tsukkomi_margin: float = 0.365,
     caption_fontsize: int = 72,
+    text_side: str = "center",
 ) -> str:
-    # Caption=下部中央 / Hook=中央上寄りの大テキスト / Tsukkomi=上部のネタ字幕 /
-    # Title=上帯の常時タイトル（fitレイアウト用）。余白は高さに比例させる
+    # Caption=下部 / Hook=上部の大テキスト / Tsukkomi=ネタ字幕 /
+    # Title=上帯の常時タイトル（fitレイアウト用）。余白は高さに比例させる。
+    # text_side='left'/'right' で、話者と反対側の空きスペースに文字を寄せられる
+    # （被写体が画面の片側に立つ構図で、顔にテロップが被るのを避ける）
     mv_caption = round(height * caption_margin)
     mv_hook = round(height * 0.219)
     mv_tsukkomi = round(height * tsukkomi_margin)
     mv_title = round(height * 0.055)
+
+    side_margin = round(width * 0.45)  # 反対側を空けて、テキスト箱を空きスペース側に限定する
+    if text_side == "left":
+        align_bottom, align_top = 1, 7
+        ml, mr = 60, side_margin
+    elif text_side == "right":
+        align_bottom, align_top = 3, 9
+        ml, mr = side_margin, 60
+    else:
+        align_bottom, align_top = 2, 8
+        ml, mr = 60, 60
     return f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {width}
@@ -60,10 +74,10 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Caption,{font},{caption_fontsize},{ass_color(caption_color)},&H000000FF,&H00101010,&H96000000,-1,0,0,0,100,100,0,0,1,5,2,2,60,60,{mv_caption},1
-Style: Hook,{font},96,{ass_color(hook_color)},&H000000FF,&H00101010,&H96000000,-1,0,0,0,100,100,0,0,1,7,3,8,60,60,{mv_hook},1
-Style: Tsukkomi,{font},66,{ass_color(tsukkomi_color)},&H000000FF,&H00101010,&H96000000,-1,0,0,0,100,100,0,0,1,5,2,8,60,60,{mv_tsukkomi},1
-Style: Title,{font},84,{ass_color(title_color)},&H000000FF,&H00101010,&H96000000,-1,0,0,0,100,100,0,0,1,4,2,8,60,60,{mv_title},1
+Style: Caption,{font},{caption_fontsize},{ass_color(caption_color)},&H000000FF,&H00101010,&H96000000,-1,0,0,0,100,100,0,0,1,5,2,{align_bottom},{ml},{mr},{mv_caption},1
+Style: Hook,{font},96,{ass_color(hook_color)},&H000000FF,&H00101010,&H96000000,-1,0,0,0,100,100,0,0,1,7,3,{align_top},{ml},{mr},{mv_hook},1
+Style: Tsukkomi,{font},66,{ass_color(tsukkomi_color)},&H000000FF,&H00101010,&H96000000,-1,0,0,0,100,100,0,0,1,5,2,{align_top},{ml},{mr},{mv_tsukkomi},1
+Style: Title,{font},84,{ass_color(title_color)},&H000000FF,&H00101010,&H96000000,-1,0,0,0,100,100,0,0,1,4,2,{align_top},{ml},{mr},{mv_title},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text

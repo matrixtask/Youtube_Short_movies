@@ -23,7 +23,9 @@ SVG_SYSTEM = """あなたはYouTubeショート向けの挿絵を描くイラス
 - viewBox="0 0 900 900"、背景は透過（背景の矩形を描かない）
 - フラットデザイン。太い輪郭線(stroke)、はっきりした色、シンプルな形
 - 遠目でも伝わる大きなモチーフ1〜2個。細かすぎる描写はしない
-- 文字を入れる場合は日本語で短く、font-family="sans-serif" を使う"""
+- 文字は入れない。絵だけで伝える（環境によりフォントが崩れるため）。
+  どうしても必要なら数字か記号だけにし、
+  font-family="Noto Sans CJK JP, Noto Sans JP, sans-serif" を必ず指定する"""
 
 
 def extract_svg(text: str) -> str | None:

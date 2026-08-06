@@ -132,6 +132,7 @@ def process_video(
             "caption_margin": cfg.caption_margin,
             "tsukkomi_margin": cfg.tsukkomi_margin,
             "caption_fontsize": cfg.caption_fontsize,
+            "text_side": cfg.text_side,
         }
         # 横型ソースは既定で「横幅フィット+上下帯（帯にタイトル）」でショート化する
         landscape = is_landscape(video)

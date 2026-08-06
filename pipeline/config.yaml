@@ -25,3 +25,9 @@ tsukkomi_color: "#FFD700"
 # 16:9ワイド版も同時生成（まとめ・ロング用）
 shorts_layout: fit
 wide_enabled: true
+
+# 撮影の構図: 話者が画面右に立つため、テロップと挿絵は左の空きスペースへ
+text_side: left
+illustration_x: 0.27
+illustration_width: 0.55
+illustration_y: 0.45

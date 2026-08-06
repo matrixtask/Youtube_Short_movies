@@ -29,8 +29,17 @@ class TestFitLayout:
     def test_illustration_position_configurable(self):
         fc = build_filter_complex([(0.0, 10.0)], None, [(1, 3.0, 6.0)],
                                   ill_width=0.5, ill_y=0.5)
-        assert "[1:v]scale=540:-1[ill0]" in fc      # 幅50%
-        assert "overlay=(W-w)/2:(H-h)/2-0:" in fc   # 中心=画面中央
+        assert "[1:v]scale=540:-1[ill0]" in fc      # 短辺(1080)の50%
+        assert "overlay=540-w/2:(H-h)/2-0:" in fc   # 中心=画面中央
+
+    def test_illustration_x_moves_to_side(self):
+        fc = build_filter_complex([(0.0, 10.0)], None, [(1, 3.0, 6.0)], ill_x=0.27)
+        assert "overlay=291-w/2:" in fc             # int(1080*0.27)=291 → 左の空きスペース
+
+    def test_illustration_width_uses_short_side_in_wide(self):
+        fc = build_filter_complex([(0.0, 10.0)], None, [(1, 3.0, 6.0)],
+                                  width=1920, height=1080, ill_width=0.55)
+        assert "[1:v]scale=594:-1[ill0]" in fc      # 短辺=1080 の55%（横型でもはみ出さない）
 
 
 class TestEscapeFilterPath:

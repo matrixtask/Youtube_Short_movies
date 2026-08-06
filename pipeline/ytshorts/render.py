@@ -35,6 +35,7 @@ def build_filter_complex(
     video_y: float = 0.42,
     ill_width: float = 0.8,
     ill_y: float = 0.38,
+    ill_x: float = 0.5,
 ) -> str:
     """ショート1本ぶんの filter_complex を組み立てる。
 
@@ -74,11 +75,14 @@ def build_filter_complex(
         label = "vsub"
 
     for k, (idx, start, end) in enumerate(illustrations):
-        parts.append(f"[{idx}:v]scale={int(width * ill_width)}:-1[ill{k}]")
-        # 挿絵の中心が画面の ill_y（上からの比率）に来るように置く
+        # 幅は短辺基準にする（縦=幅の80%、横=左右の空きに収まるサイズになる）
+        px = int(min(width, height) * ill_width)
+        parts.append(f"[{idx}:v]scale={px}:-1[ill{k}]")
+        # 挿絵の中心が (ill_x, ill_y)（画面に対する比率）に来るように置く
+        x_expr = f"{int(width * ill_x)}-w/2"
         offset = int(height * (0.5 - ill_y))
         parts.append(
-            f"[{label}][ill{k}]overlay=(W-w)/2:(H-h)/2-{offset}"
+            f"[{label}][ill{k}]overlay={x_expr}:(H-h)/2-{offset}"
             f":enable='between(t,{start:.3f},{end:.3f})'[vov{k}]"
         )
         label = f"vov{k}"
@@ -116,6 +120,7 @@ def build_short_command(
         video_y=cfg.video_y,
         ill_width=cfg.illustration_width,
         ill_y=cfg.illustration_y,
+        ill_x=cfg.illustration_x,
     )
     cmd += [
         "-filter_complex", fc,
