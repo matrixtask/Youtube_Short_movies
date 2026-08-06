@@ -153,6 +153,8 @@ function handleScriptReply(threadTs, text) {
 
   // スレッド内での「承認 xxxx」「却下 xxxx」も受け付ける
   if (handleApprovalCommand(trimmed)) return true;
+  // 「再編集 <指示>」→ その動画を新しい指示で編集し直す
+  if (handleReeditCommand(threadTs, trimmed)) return true;
 
   if (/^(リテイク|作り直し|retake)$/i.test(trimmed)) {
     updateRowsWhere(SHEET.SCRIPTS, 'script_id', scriptId, { status: SCRIPT_STATUS.EXPIRED });

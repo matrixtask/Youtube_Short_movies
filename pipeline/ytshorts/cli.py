@@ -63,14 +63,20 @@ def find_inbox_videos(cfg: Config) -> list[Path]:
 
 
 def process_video(
-    video: Path, cfg: Config, script: dict | None, force: bool, instructions: str = ""
+    video: Path, cfg: Config, script: dict | None, force: bool,
+    instructions: str = "", replan: bool = False,
 ) -> list[dict]:
-    """1本の撮りっぱなし動画からショートを量産する。生成したindexエントリを返す。"""
+    """1本の撮りっぱなし動画からショートを量産する。生成したindexエントリを返す。
+
+    replan=True は再編集（新しい指示でプランだけ作り直す。文字起こしは再利用）。
+    """
     session_dir = cfg.sessions / video.stem
     session_dir.mkdir(parents=True, exist_ok=True)
     if force:
         for name in ("transcript.json", "plan.json"):
             (session_dir / name).unlink(missing_ok=True)
+    elif replan:
+        (session_dir / "plan.json").unlink(missing_ok=True)
 
     print(f"[1/4] 文字起こし中… ({video.name})")
     transcript = load_or_transcribe(video, session_dir, cfg)
@@ -241,7 +247,8 @@ def pull_once(cfg: Config) -> int:
                 pull.download_slack_file(v["url_private"], dest, token)
             script = {"script_id": v.get("script_id") or None, "questions": v.get("questions") or []}
             made = process_video(dest, cfg, script if script["questions"] else None,
-                                 force=False, instructions=v.get("instructions", ""))
+                                 force=False, instructions=v.get("instructions", ""),
+                                 replan=bool(v.get("reprocess")))
             index.extend(made)
             save_index(cfg, index)
             shared = share_shorts_to_slack(cfg, token, channel, v, made)

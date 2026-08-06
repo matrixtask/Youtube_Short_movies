@@ -37,12 +37,15 @@ function handleVideoUpload(event) {
   var script = isFreeTalk ? null : findScriptForVideo(event.thread_ts);
   var existing = readTable(SHEET.VIDEOS);
   var added = 0;
+  var codes = [];
 
   files.forEach(function (f) {
     // Slackはイベントを再送することがあるため file_id で重複排除する
     if (existing.some(function (r) { return String(r.file_id) === String(f.id); })) return;
+    var vid = newId('vid');
+    codes.push(vid.slice(-4));
     appendRowObj(SHEET.VIDEOS, {
-      video_id: newId('vid'),
+      video_id: vid,
       created_at: fmtDateTime(nowJst()),
       script_id: script ? String(script.script_id) : '',
       thread_ts: 'ts_' + threadTs,
@@ -68,13 +71,58 @@ function handleVideoUpload(event) {
   }
   var dispatched = triggerGithub('video-uploaded');
   sendSlack(
-    ':inbox_tray: 動画を' + added + '本受け取りました。編集キューに入れました。' +
+    ':inbox_tray: 動画を' + added + '本受け取りました（コード: ' + codes.join(', ') + '）。' +
     (script ? '\n台本: ' + script.script_id : '') +
     (dispatched ? '\nクラウドで編集を開始します。終わったらこのスレッドにショートを返します。'
-                : '\n編集が終わったらこのスレッドに結果を返します。'),
+                : '\n編集が終わったらこのスレッドに結果を返します。') +
+    '\n指示を変えて編集し直すときは「再編集 <指示>」と返信（複数本あるときは「再編集 コード <指示>」）。',
     threadTs
   );
   logEvent('video_received', added + '本 script=' + (script ? script.script_id : 'なし'));
+  return true;
+}
+
+/**
+ * 動画スレッドでの「再編集 <指示>」を処理する（レベル2の進化版）。
+ * 対象はそのスレッドの最新動画。複数本あるときは受付時のコード
+ * （video_id末尾4桁）を先頭に付けて特定できる。
+ * 例:「再編集 テロップ多めで」「再編集 3841 挿絵なしで」
+ */
+function handleReeditCommand(threadTs, text) {
+  var m = String(text || '').trim().match(/^(再編集|編集し直し|reedit)\s*[:：]?\s*([\s\S]+)$/i);
+  if (!m) return false;
+  var body = m[2].trim();
+  var videos = readTable(SHEET.VIDEOS).filter(function (r) {
+    return slackTsEqual(r.thread_ts, threadTs);
+  });
+  if (!videos.length) return false;
+
+  var target = videos[videos.length - 1];
+  var token = body.split(/\s+/)[0];
+  var byCode = videos.filter(function (r) { return String(r.video_id).slice(-4) === token; });
+  if (byCode.length) {
+    target = byCode[byCode.length - 1];
+    body = body.slice(token.length).trim();
+  }
+  if (!body) {
+    sendSlack(':warning: 指示の内容が空です。例:「再編集 テロップ多めで」', threadTs);
+    return true;
+  }
+
+  updateRowsWhere(SHEET.VIDEOS, 'video_id', target.video_id, {
+    instructions: body.slice(0, 500),
+    status: VIDEO_STATUS.PENDING,
+    claimed_at: '',
+    claimed_by: '',
+  });
+  var dispatched = triggerGithub('video-uploaded');
+  sendSlack(
+    ':repeat: ' + String(target.file_name) + ' を新しい指示で編集し直します:\n> ' + body +
+    '\n（前に生成したショートはそのまま残ります。不要なら「却下 <コード>」で）' +
+    (dispatched ? '' : '\n次の処理タイミング（毎時 or make pull）で実行されます。'),
+    threadTs
+  );
+  logEvent('video_reedit', target.video_id + ': ' + body.slice(0, 100));
   return true;
 }
 
@@ -204,6 +252,8 @@ function listPendingVideos() {
         url_private: String(r.url_private),
         size: Number(r.size) || 0,
         instructions: String(r.instructions || ''),
+        // 一度処理済み → 再編集。ローカルの古いプランを捨てて作り直す合図
+        reprocess: !!String(r.processed_at || ''),
         questions: questions
           .filter(function (q) { return scriptId && String(q.script_id) === scriptId; })
           .sort(function (a, b) { return Number(a.idx) - Number(b.idx); })
