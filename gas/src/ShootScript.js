@@ -3,7 +3,7 @@
  *
  * 流れ:
  *   1. 朝のトリガーで startDailyShootScript() が実行される
- *   2. テーマ選定 → Astra/Claudeが「カメラに向かって答える用」の質問+ネタ指示を生成
+ *   2. テーマ選定 → 3者の企画会議 → 架空の広報責任者の批評 → 発話案を生成
  *      ScriptQuality.jsで直近質問との重複・構成を検証し、話す順序をhintへ保存
  *   3. Slackに台本が届く → スマホで質問に答える動画を撮る（通しでOK）
  *   4. 撮った動画をそのままスレッドに投稿 → Videos.js が編集キューに登録
@@ -38,14 +38,22 @@ function startDailyShootScript() {
 
 /** 追加台本。Slackのチャンネルに「台本」と書き込むと開始される */
 function startExtraShootScript() {
-  startShootScript('svx', ':movie_camera: 追加の撮影台本');
+  try {
+    startShootScript('svx', ':movie_camera: 追加の撮影台本');
+  } catch (e) {
+    // モデル出力やAPIエラー本文は通知しない。投稿済みの部分があっても成功とは伝えない。
+    notifySlack(':warning: 台本の作成・送信を完了できませんでした。品質基準を満たす材料不足、応答形式、接続または時間制限を確認してください。具体的な開発判断・比較対象・確かめたいことを台本スレッドのメモに追加すると企画材料になります。記録はLogを確認してください。');
+    throw e;
+  }
 }
 
 function startShootScript(kind, title) {
-  var themes = pickThemesForShoot();
+  var deadline = Date.now() + 240000;
   var count = Number(getProp('SHOOT_QUESTIONS', '5'));
+  if (!Number.isInteger(count) || count < 1 || count > 10) throw new Error('SHOOT_QUESTIONSは1〜10の整数にしてください');
+  var themes = pickThemesForShoot(Math.min(2, count));
   var recentNotes = collectRecentNotes(5);
-  var questions = generateShootQuestions(themes, count, recentNotes);
+  var questions = generateShootQuestions(themes, count, recentNotes, deadline);
 
   var scriptId = fmtDate(nowJst()) + '_' + newId(kind);
   var intro = [
@@ -53,7 +61,7 @@ function startShootScript(kind, title) {
     'テーマ: ' + themes.map(function (t) { return t.theme + '（' + labelForCategory(t.category) + '）'; }).join(' / '),
     '',
     '撮り方: 横向きで、1問ずつカメラに向かって答えてください。1本の動画で通しでOK。',
-    '各問は「話し出し→話す順」を目安に。分からない数字や未経験の話は無理に埋めず、追問を使ってください。',
+    '各問に発話案と展開を用意しました。自分の言葉に直してOK。[本人確認]は撮影前に埋め、事実が違えば展開を変えてください。',
     '言い直しや間は後で編集できます。各回答の前後には短い間を空けてください。',
     '撮り終わったら *このスレッドに動画をそのまま投稿* してください。あとは全部自動です。',
   ].join('\n');
@@ -71,7 +79,6 @@ function startShootScript(kind, title) {
     note: '',
   });
 
-  var lines = [];
   questions.forEach(function (q, idx) {
     appendRowObj(SHEET.QUESTIONS, {
       script_id: scriptId,
@@ -82,28 +89,37 @@ function startShootScript(kind, title) {
       neta: q.neta || '',
       hint: q.hint || '',
     });
-    lines.push(formatShootQuestion(q, idx));
   });
 
-  sendSlack(lines.join('\n\n'), threadTs);
+  shootQuestionMessages(questions).forEach(function (message) { sendSlack(message, threadTs); });
   logEvent('script_start', scriptId + ' themes=' + JSON.stringify(themes));
 }
 
-function generateShootQuestions(themes, count, recentNotes) {
+function generateShootQuestions(themes, count, recentNotes, deadline) {
   if (!Number.isInteger(count) || count < 1 || count > 10 || !themes.length || themes.length > count) {
     throw new Error('SHOOT_QUESTIONSはテーマ数以上、1〜10の整数にしてください');
   }
   var concept = getProp('CHANNEL_CONCEPT', '中井佑の、とにかく早く移動したい！');
   var recent = collectRecentQuestions(30);
-  var user = JSON.stringify({ themes: themes, count: count, recent_notes: recentNotes,
+  deadline = deadline || Date.now() + 240000;
+  var input = { themes: themes, count: count, channel: concept, recent_notes: recentNotes,
     recent_questions: recent, theme_insights: getProp('THEME_INSIGHTS', ''),
-    script_insights: getProp('SCRIPT_INSIGHTS', '') });
+    script_insights: getProp('SCRIPT_INSIGHTS', ''), recruiting: recruitingContext() };
+  var editorial = runEditorialRoom(input, deadline);
+  var user = JSON.stringify(Object.assign({}, input, { editorial: editorial }));
   var correction = '';
   // JSON形式と構成の修復は1回だけ。APIエラーは再生成で握り潰さない。
   for (var attempt = 0; attempt < 2; attempt++) {
-    var text = askAI(shootQuestionSystem(concept), user + correction, Math.max(4000, count * 900));
+    checkEditorialTime(deadline, 30000);
+    var text = askAI(shootQuestionSystem(concept), user + correction, Math.max(4000, count * 1400));
+    checkEditorialTime(deadline, 0);
     try {
-      var questions = validateShootQuestions(parseJsonLoose(text), themes, count, recent);
+      var questions = validateShootQuestions(parseJsonLoose(text), themes, count, recent, editorial.review);
+      logEvent('script_editorial', JSON.stringify({ version: 'recruiting-v1', perspectives: editorial.discussion.perspectives,
+        resolution: editorial.discussion.resolution, critique: editorial.review.critique,
+        selected: editorial.review.selected.map(function (s) { return { id: s.pitch.id, title: s.pitch.title,
+          novelty: s.novelty, specificity: s.specificity, recruiting: s.recruiting, reason: s.reason, revision: s.revision }; }),
+        rejected: editorial.review.rejected }));
       logEvent('script_quality', 'questions=' + questions.length + ' repair=' + attempt + ' recent=' + recent.length);
       return questions;
     } catch (e) {

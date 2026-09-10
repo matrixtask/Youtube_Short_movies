@@ -1,44 +1,6 @@
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-const vm = require('node:vm');
 const { test } = require('node:test');
-
-const themes = [{ theme: '移動の判断', category: 'evergreen', notes: '具体的な比較' },
-  { theme: '乗り継ぎ', category: 'neta', notes: '' }];
-
-function question(overrides = {}) {
-  return { theme: '移動の判断', category: 'evergreen', question: '移動手段を選ぶとき、最初に何を比べますか？',
-    format: 'decision', viewer_value: '所要時間を比べる基準が分かる',
-    opening: '最初に比べる点を一言で', beats: ['判断基準', '具体的な比較', '使える場面'],
-    closing: '冒頭の判断基準を、使える場面とともに一言で言い直す', visual: '',
-    follow_up: '家を出てから到着までで考えると？', neta: '', ...overrides };
-}
-function valid() {
-  return [question(), question({ theme: '乗り継ぎ', category: 'neta', format: 'experience',
-    question: '乗り継ぎで迷った場面を一つ挙げるなら？' })];
-}
-function sandbox(history = []) {
-  const calls = { ai: [], writes: [], slack: [], logs: [] };
-  const context = vm.createContext({});
-  for (const file of ['Config.js', 'Pure.js', 'ScriptQuality.js', 'ShootScript.js']) {
-    vm.runInContext(fs.readFileSync(path.join(__dirname, '../src', file), 'utf8'), context);
-  }
-  context.getProp = (key, fallback = '') => key === 'SHOOT_QUESTIONS' ? '2' : fallback;
-  context.readTable = () => structuredClone(history);
-  context.askAI = (system, user, limit) => { calls.ai.push({ system, user, limit }); return JSON.stringify(valid()); };
-  context.logEvent = (...args) => calls.logs.push(args);
-  context.pickThemesForShoot = () => structuredClone(themes);
-  context.collectRecentNotes = () => ['移動手段の比較を話したい'];
-  context.nowJst = () => new Date('2026-09-10T12:00:00Z');
-  context.fmtDate = () => '2026-09-10';
-  context.fmtDateTime = () => '2026-09-10 21:00:00';
-  context.newId = () => 'sv_test';
-  context.labelForCategory = cat => cat;
-  context.sendSlack = (...args) => { calls.slack.push(args); return { ts: '123.456' }; };
-  context.appendRowObj = (...args) => calls.writes.push(args);
-  return { context, calls };
-}
+const { themes, question, valid, sandbox, responseFor } = require('./editorial-fixtures.cjs');
 
 test('validated structure survives storage and appears in Slack using existing columns', () => {
   const { context, calls } = sandbox();
@@ -68,8 +30,11 @@ test('latest 30 questions and both learning contexts reach generation', () => {
   assert.equal(input.recent_questions[29].question, '質問39');
   assert.equal(input.theme_insights, '比較なら話せる');
   assert.equal(input.script_insights, '前置きを短く');
-  assert.match(calls.ai[0].system, /出典のない統計/);
-  assert.match(calls.ai[0].system, /数字を一律に禁止しない/);
+  const writerInput = JSON.parse(calls.ai[2].user);
+  assert.deepEqual(writerInput.recent_questions, input.recent_questions);
+  assert.equal(writerInput.theme_insights, input.theme_insights);
+  assert.equal(writerInput.script_insights, input.script_insights);
+  assert.equal(writerInput.editorial.review.selected.length, 2);
 });
 
 test('rejects repeated questions despite punctuation/fullwidth differences', () => {
@@ -112,6 +77,7 @@ test('invalid answer repairs once; repeated failure creates no partial script or
   const { context, calls } = sandbox();
   let attempts = 0;
   context.askAI = (system, user) => {
+    if (!system.includes('STAGE: script_writing')) return JSON.stringify(responseFor(system));
     attempts++;
     if (attempts === 1) return '[]';
     assert.match(user, /質問数/);
@@ -120,7 +86,10 @@ test('invalid answer repairs once; repeated failure creates no partial script or
   assert.equal(context.generateShootQuestions(themes, 2, []).length, 2);
   assert.equal(attempts, 2);
   attempts = 0;
-  context.askAI = () => { attempts++; return '[]'; };
+  context.askAI = system => {
+    if (!system.includes('STAGE: script_writing')) return JSON.stringify(responseFor(system));
+    attempts++; return '[]';
+  };
   assert.throws(() => context.startShootScript('sv', 'test'), /品質検証/);
   assert.equal(attempts, 2);
   assert.equal(calls.writes.length, 0);
@@ -159,4 +128,90 @@ test('optional visual guidance is stored only when useful; legacy hints still re
   assert.match(result[0].hint, /見せるもの（任意）: 家から/);
   assert.doesNotMatch(result[1].hint, /見せるもの/);
   assert.match(context.formatShootQuestion({ question: '以前の質問', hint: '以前の自由記述' }, 0), /以前の自由記述/);
+});
+
+test('Slack message splitting respects question boundaries and escaped character limits', () => {
+  const { context } = sandbox();
+  const questions = [
+    { question: '比較する条件は？', hint: '&'.repeat(400) },
+    { question: '次は何を測る？', hint: '<'.repeat(500) },
+  ];
+  const messages = context.shootQuestionMessages(questions);
+  assert.equal(messages.length, 2);
+  messages.forEach(message => assert.ok(message.length <= 3500));
+  assert.equal(messages[0], context.formatShootQuestion(questions[0], 0));
+  assert.equal(messages[1], context.formatShootQuestion(questions[1], 1));
+  const short = [{ question: '一問目', hint: '短い補足' }, { question: '二問目', hint: '次の補足' }];
+  assert.equal(context.shootQuestionMessages(short)[0], short.map(context.formatShootQuestion).join('\n\n'));
+});
+
+test('a long escaped question splits without losing text, HTML entities or emoji', () => {
+  const { context } = sandbox();
+  const question = { question: '長い比較の例', hint: 'A&🚀<>'.repeat(1500) };
+  const messages = context.shootQuestionMessages([question]);
+  assert.ok(messages.length > 2);
+  assert.equal(messages.join(''), context.formatShootQuestion(question, 0));
+  for (const message of messages) {
+    assert.ok(message.length <= 3500);
+    assert.equal(message.isWellFormed(), true);
+    assert.doesNotMatch(message, /&(?!(?:amp|lt|gt);)/);
+  }
+});
+
+test('all split script messages are sent to the same parent thread', () => {
+  const { context, calls } = sandbox();
+  const generated = valid().map(q => ({ ...q, hint: '比較&🚀'.repeat(600) }));
+  context.generateShootQuestions = () => generated;
+  context.startShootScript('sv', '今日の台本');
+  const expected = Array.from(context.shootQuestionMessages(generated));
+  assert.ok(expected.length > 1);
+  assert.equal(calls.slack.length, expected.length + 1);
+  assert.deepEqual(calls.slack.slice(1).map(([message]) => message), expected);
+  assert.ok(calls.slack.slice(1).every(([message, thread]) => message.length <= 3500 && thread === '123.456'));
+  assert.equal(calls.writes.filter(([sheet]) => sheet === 'Questions').length, 2);
+});
+
+test('extra-script failure reports a fixed notice once without exposing API content or storing questions', () => {
+  const notices = [];
+  for (const detail of ['HTTP 401 PRIVATE_API_BODY', 'MODEL_OUTPUT_DO_NOT_PUBLISH']) {
+    const { context, calls } = sandbox();
+    const failure = new Error(detail);
+    context.askAI = () => { throw failure; };
+    assert.throws(() => context.startExtraShootScript(), error => error === failure);
+    assert.equal(calls.notifications.length, 1);
+    assert.doesNotMatch(calls.notifications[0], /PRIVATE_API_BODY|MODEL_OUTPUT_DO_NOT_PUBLISH|401/);
+    assert.match(calls.notifications[0], /台本の作成・送信を完了できませんでした/);
+    assert.equal(calls.writes.length, 0);
+    assert.equal(calls.slack.length, 0);
+    notices.push(calls.notifications[0]);
+  }
+  assert.equal(notices[0], notices[1]);
+});
+
+test('one requested question selects only one theme and reaches generation with that count', () => {
+  const { context } = sandbox();
+  let pickedCount;
+  context.getProp = (key, fallback) => key === 'SHOOT_QUESTIONS' ? '1' : fallback;
+  context.pickThemesForShoot = count => { pickedCount = count; return [themes[0]]; };
+  context.generateShootQuestions = (picked, count) => {
+    assert.deepEqual(picked, [themes[0]]);
+    assert.equal(count, 1);
+    return [question()];
+  };
+  context.startShootScript('sv', '一問');
+  assert.equal(pickedCount, 1);
+});
+
+test('invalid configured question counts stop before theme selection or AI', () => {
+  for (const count of ['0', '-1', '1.5', '11', 'invalid', '']) {
+    const { context, calls } = sandbox();
+    let selections = 0;
+    context.getProp = (key, fallback) => key === 'SHOOT_QUESTIONS' ? count : fallback;
+    context.pickThemesForShoot = () => { selections++; return themes; };
+    assert.throws(() => context.startShootScript('sv', 'test'), /SHOOT_QUESTIONS/);
+    assert.equal(selections, 0);
+    assert.equal(calls.ai.length, 0);
+    assert.equal(calls.writes.length, 0);
+    assert.equal(calls.slack.length, 0);
+  }
 });

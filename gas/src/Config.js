@@ -13,6 +13,8 @@
  *   OPENAI_MODEL        既定: gpt-6-astra
  *   OPENAI_REASONING_EFFORT  既定: medium（low/medium/high/xhigh/max）
  *   CHANNEL_CONCEPT     チャンネルコンセプト（台本生成の文脈に使う）
+ *   SCRIPT_AUDIENCE     想定候補者（既定: 難しい開発に参加したい技術者）
+ *   RECRUITING_CONTEXT  仕事・採用の確認済み情報（職種/導線など。未設定なら創作しない）
  *   CLAUDE_MODEL        既定: claude-sonnet-5
  *   SHOOT_QUESTIONS     1回の台本の質問数（既定: 5）
  *   SHOOT_DAYS          台本を届ける曜日 "MON,WED,FRI" など（既定: 毎日）

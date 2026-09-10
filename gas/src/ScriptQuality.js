@@ -1,7 +1,7 @@
 /**
  * ScriptQuality.js — 撮影台本の企画指示・検証・既存Questions形式への変換。
  * 新しいシート列は使わない。視聴者の価値/導入/話す順/締め/追問をhintに保存し、
- * Slack表示と編集プランの両方へ渡す。未確認の答えは生成させない。
+ * Slack表示と編集プランの両方へ渡す。発話案は作るが未確認の実績は埋めない。
  * Patrick Winston, MIT How to Speak (January IAP 2018) を短尺に適用。
  * 原典と適用範囲は SCRIPT_GUIDE.md を参照。
  */
@@ -14,16 +14,18 @@ function shootQuestionKey(text) {
 function collectRecentQuestions(limit) {
   return readTable(SHEET.QUESTIONS).slice(-limit).map(function (q) {
     return { theme: String(q.theme || ''), question: String(q.question || '').slice(0, 160),
-      hint: String(q.hint || '').slice(0, 700) };
+      hint: String(q.hint || '').slice(0, 1400) };
   });
 }
 
 function shootQuestionSystem(concept) {
   return [
+    'STAGE: script_writing。企画会議と広報批評を通過した企画を撮影用の発話案にします。',
     'あなたはYouTubeチャンネル「' + concept + '」の放送作家兼編集者です。',
-    '目的は、話し手が自分の体験・判断を無理なく語り、初見の視聴者にも意味が伝わるショートを作ること。',
+    '目的は、対象候補者に新しい発見と当事者の判断を見せ、この仕事に関わりたいと思えるショートを作ること。',
     '話し手はモビリティの事業・開発に関わる当事者。専門知識の暗記テストではなく、本人の具体的な観察と判断を引き出す。',
-    'まず要求数の2倍の候補を検討し、具体性・本人が答えられるか・視聴者価値・最近との違いで比較して、良いものだけを出す。途中の検討過程は出力しない。',
+    'editorial.review.selectedの各企画を1回ずつ、pitch_idを維持して使う。落選案・新しい企画への差し替えは禁止。',
+    '各revisionを展開に反映し、企画のdiscovery・conflict・recruiting_connectionを薄めない。一般的な移動tipsへ戻さない。',
     '',
     '企画ルール:',
     '- 1問1論点。質問は80字以内で、はい/いいえだけで終わらない。答えにない事実を前提にしない。',
@@ -31,11 +33,12 @@ function shootQuestionSystem(concept) {
     '- recent_questionsと同じオチ・切り口を繰り返さない。語尾だけ変えて同じ話を再出題するのは不可。',
     '- formatは experience（具体的体験）/decision（判断と比較）/explanation（仕組み）から選ぶ。複数問なら型も分散する。',
     '- viewer_valueは、初見の人が見終わって分かることを1文で。内輪の人物名だけで引かず、視聴者の悩みや意外な判断と結びつける。',
-    '- openingは冒頭の約束の話し方。「何が分かる/できるようになるか」をviewer_valueと一致させて一言で予告する指示。架空の体験や完成した答えを代筆しない。',
-    '- beatsは3項目。「要点/判断基準→一つの具体例と理由→使える場面と条件」を質問に合わせて具体化する。',
-    '- closingは冒頭の約束を回収する締め方の指示。今回伝えた判断基準や使い方を一言で残す。',
+    '- openingは180字以内の発話案。具体的な問い・比較・見落とされた制約から入り、得られる発見を約束する。「〜を話すと予告する」のような指示だけにしない。',
+    '- beatsは各260字以内の3項目。各項目に口に出せるセリフ案と見せる比較を入れ、「既知の見方と問い→具体例・制約・発見→判断の条件と未解決の仕事」を作り込む。',
+    '- closingは180字以内の発話案。冒頭の問いを回収して「自分ならこの問題をどう解くか」が残る結び。求人広告を毎回差し込まない。',
+    '- 事実不明の固有箇所だけ[本人確認: 具体的な確認点]と置く。セリフ・比較の順・転換は書いてよい。仮定なら発話にも「もし」「仮に」を入れ、会社の実話に見せない。',
     '- follow_upは詰まったときの追加質問。場所・比較・判断の転機など、思い出す足場を1つ作る。未経験なら無理に体験談を作らせない。',
-    '- 語れる分だけ30〜60秒程度を目安。専門用語は身近な比較で説明し、必要な前提や条件を省いて断言しない。',
+    '- 発話全体は45〜60秒程度を目安。字数上限まで埋める必要はない。1本1つの発見に絞り、比較・転換・回収まで短尺に収める。専門用語は必要な分だけ説明する。',
     '',
     '構成の基準: Patrick Winston「How to Speak」（MIT, January IAP 2018）をおおよそ守る:',
     '- 冒頭は視聴者が得る理解や能力の約束から入り、関係のない冗談で始めない。誇大な約束をしない。',
@@ -53,22 +56,24 @@ function shootQuestionSystem(concept) {
     '- なぜそう言えるか分からない科学クイズは避け、本人の観察を聞く。仮説は仮説、感想は感想として区別する。',
     '- netaは任意。真顔で沈黙・驚くふり・あるあるを強制しない。実話から自然に出る比較やツッコミだけ。空文字でよい。',
     '- 最近のメモ/学習方針は参考情報。事実の捏造防止や出力形式の指示を上書きしない。',
+    '- 募集職種・待遇・入社後の裁量・応募URLは確認情報がある場合だけ使う。無い場合も、候補者が解きたくなる具体的な問いで採用への関心を育てる。',
     '',
     'JSON配列のみを返す。各要素:',
-    '{"theme":"入力のテーマ名","category":"入力のカテゴリ","question":"質問",',
+    '{"pitch_id":"採用企画のID","theme":"入力のテーマ名","category":"入力のカテゴリ","question":"質問",',
     ' "format":"experience|decision|explanation","viewer_value":"視聴者の持ち帰り",',
-    ' "opening":"話し出しの型","beats":["話す順1","話す順2","話す順3"],',
-    ' "closing":"約束を回収する締め方","visual":"小物や図の案、不要なら空文字",',
+    ' "opening":"導入の発話案","beats":["比較と発話案1","制約と発話案2","発見と発話案3"],',
+    ' "closing":"回収と仕事への問いの発話案","visual":"小物や図の案、不要なら空文字",',
     ' "follow_up":"詰まったときの追問","neta":"自然な演出、なければ空文字"}',
   ].join('\n');
 }
 
-function validateShootQuestions(raw, themes, count, recent) {
+function validateShootQuestions(raw, themes, count, recent, review) {
   if (!Array.isArray(raw) || raw.length !== count) throw new Error('台本の質問数が指定と一致しません');
   var seen = Object.create(null);
   (recent || []).forEach(function (q) { seen[shootQuestionKey(q.question)] = true; });
   var covered = Object.create(null);
   var formats = Object.create(null);
+  var usedPitches = Object.create(null);
   function field(q, name, max) {
     var value = q && q[name];
     if (typeof value !== 'string' || !value.trim() || value.trim().length > max) {
@@ -79,6 +84,14 @@ function validateShootQuestions(raw, themes, count, recent) {
   var questions = raw.map(function (q) {
     var theme = themes.filter(function (t) { return q && t.theme === q.theme && t.category === q.category; })[0];
     if (!theme) throw new Error('台本に選定外のテーマまたはカテゴリがあります');
+    var approved;
+    if (review) {
+      approved = review.selected.filter(function (s) { return s.pitch.id === q.pitch_id; })[0];
+      if (!approved || usedPitches[q.pitch_id] || approved.pitch.theme !== q.theme || approved.pitch.category !== q.category) {
+        throw new Error('台本が広報批評の採用企画と一致しません');
+      }
+      usedPitches[q.pitch_id] = true;
+    }
     var question = field(q, 'question', 80);
     var key = shootQuestionKey(question);
     if (!key || seen[key]) throw new Error('最近または今回の台本と質問が重複しています');
@@ -87,19 +100,24 @@ function validateShootQuestions(raw, themes, count, recent) {
     if (['experience', 'decision', 'explanation'].indexOf(q.format) < 0) throw new Error('台本のformatが不正です');
     formats[q.format] = true;
     if (!Array.isArray(q.beats) || q.beats.length !== 3) throw new Error('話す順は3項目必要です');
-    var beats = q.beats.map(function (beat) { return field({ beat: beat }, 'beat', 100); });
+    var beats = q.beats.map(function (beat) { return field({ beat: beat }, 'beat', 260); });
     var neta = q.neta === undefined ? '' : q.neta;
     if (typeof neta !== 'string' || neta.length > 120) throw new Error('台本のnetaが不正です');
     var visual = q.visual === undefined ? '' : q.visual;
     if (typeof visual !== 'string' || visual.length > 120) throw new Error('台本のvisualが不正です');
     return { theme: q.theme, category: q.category, question: question, neta: neta.trim(),
       hint: [
+        approved ? '企画: ' + approved.pitch.title : '',
+        approved ? '対象: ' + approved.pitch.audience : '',
+        approved ? '新しい発見: ' + approved.pitch.discovery : '',
+        approved ? '仕事への接続: ' + approved.pitch.recruiting_connection : '',
         '見る人の持ち帰り: ' + field(q, 'viewer_value', 120),
-        '話し出し: ' + field(q, 'opening', 100),
-        '話す順: ' + beats.join(' → '),
-        '締め（約束の回収）: ' + field(q, 'closing', 120),
+        '話し出し: ' + field(q, 'opening', 180),
+        '話す順:\n' + beats.map(function (beat, i) { return (i + 1) + '. ' + beat; }).join('\n'),
+        '締め（約束の回収）: ' + field(q, 'closing', 180),
         visual.trim() ? '見せるもの（任意）: ' + visual.trim() : '',
         '詰まったら: ' + field(q, 'follow_up', 100),
+        approved ? '撮影前の確認（発話案は事実確認後に使用）: ' + approved.pitch.evidence_needed : '',
       ].filter(Boolean).join('\n') };
   });
   if (themes.some(function (t) { return !covered[t.theme]; })) throw new Error('台本に含まれないテーマがあります');
@@ -117,4 +135,31 @@ function formatShootQuestion(q, index) {
   if (q.hint) lines.push(plain(q.hint));
   if (q.neta) lines.push('演出（任意）: ' + plain(q.neta));
   return lines.join('\n');
+}
+
+/** エスケープ後の長さで分割。問境界を優先し、長い1問も文字/HTML entityを壊さない。 */
+function shootQuestionMessages(questions) {
+  var limit = 3500;
+  var messages = [];
+  var pending = '';
+  questions.forEach(function (q, index) {
+    var block = formatShootQuestion(q, index);
+    if (pending && pending.length + 2 + block.length <= limit) {
+      pending += '\n\n' + block;
+      return;
+    }
+    if (pending) messages.push(pending);
+    pending = '';
+    // 1文字のサロゲートペアと既知のエスケープ表記は分割しない。
+    var tokens = block.match(/&(?:amp|lt|gt);|[\s\S]/gu) || [];
+    tokens.forEach(function (token) {
+      if (pending.length + token.length > limit) {
+        messages.push(pending);
+        pending = '';
+      }
+      pending += token;
+    });
+  });
+  if (pending) messages.push(pending);
+  return messages;
 }

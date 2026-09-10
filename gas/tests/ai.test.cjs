@@ -7,7 +7,7 @@ const { test } = require('node:test');
 function sandbox(properties = {}) {
   const calls = { http: [], legacy: 0, writes: [], logs: [] };
   const context = vm.createContext({});
-  for (const file of ['Config.js', 'Pure.js', 'AI.js', 'Themes.js', 'ScriptQuality.js', 'ShootScript.js', 'WebApp.js']) {
+  for (const file of ['Config.js', 'Pure.js', 'AI.js', 'Themes.js', 'EditorialRoom.js', 'ScriptQuality.js', 'ShootScript.js', 'WebApp.js']) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, '../src', file), 'utf8'), context);
   }
   context.getProp = (name, fallback = '') => properties[name] || fallback;
@@ -119,7 +119,7 @@ test('Astra selects active candidates with history and sends angles to script ge
   const picked = context.pickThemesForShoot();
   assert.equal(picked.length, 2);
   assert.equal(JSON.stringify(input).includes('休止中'), false);
-  assert.equal(input.groups[0][0].hits, 3);
+  assert.equal(input.candidates[0].hits, 3);
   assert.equal(input.script_insights, '冒頭を短く');
   assert.equal(input.notes[0], '出張の乗り継ぎで失敗した');
   assert.deepEqual(calls.writes.map(call => call[2]), ['通勤', '乗り継ぎ']);
@@ -127,10 +127,16 @@ test('Astra selects active candidates with history and sends angles to script ge
   assert.match(picked[1].notes, /失敗と対策/);
   assert.equal(calls.logs[0][0], 'theme_ai_selection');
   let scriptPrompt;
+  context.runEditorialRoom = () => ({ discussion: { perspectives: [], resolution: '会議済み' }, review: {
+    critique: '批評済み', rejected: [], selected: picked.map((t, i) => ({ pitch: {
+      id: 'p' + (i + 1), ...t, title: '企画' + i, audience: '開発者', discovery: '比較の条件',
+      recruiting_connection: 'この比較を検証する仕事', evidence_needed: '[本人確認:比較例]',
+    }, reason: '具体的な比較', revision: '条件を見せる', novelty: 4, specificity: 4, recruiting: 4 })),
+  } });
   context.askAI = (system, user) => {
     scriptPrompt = user;
     return JSON.stringify(picked.map((theme, i) => ({
-      theme: theme.theme, category: theme.category, question: '何を変えた？' + i,
+      pitch_id: 'p' + (i + 1), theme: theme.theme, category: theme.category, question: '何を変えた？' + i,
       format: 'decision', viewer_value: '判断基準が分かる', opening: '選択を一言で',
       beats: ['選択', '理由', '次に使う場面'], follow_up: '何と比べた？', neta: '',
       closing: '冒頭の判断基準を一言で回収する', visual: '',
@@ -140,13 +146,12 @@ test('Astra selects active candidates with history and sends angles to script ge
   assert.match(scriptPrompt, /朝の時短を体験から聞く/);
 });
 
-test('hallucinated, suspended, duplicate, wrong-category and incomplete theme selections do not write', () => {
+test('hallucinated, suspended, duplicate and incomplete theme selections do not write', () => {
   for (const selections of [
     [valid.themes[0]],
     [{ ...valid.themes[0], theme: '捏造テーマ' }, valid.themes[1]],
     [{ ...valid.themes[0], theme: '休止中' }, valid.themes[1]],
     [valid.themes[0], valid.themes[0]],
-    [valid.themes[1], valid.themes[0]],
     [{ ...valid.themes[0], angle: '' }, valid.themes[1]],
   ]) {
     const { context, calls } = sandbox({ OPENAI_API_KEY: 'test-key' });
@@ -157,12 +162,37 @@ test('hallucinated, suspended, duplicate, wrong-category and incomplete theme se
   }
 });
 
+test('recruiting selection can choose two evergreen themes without forcing a neta slot', () => {
+  const { context } = sandbox({ OPENAI_API_KEY: 'test-key', SCRIPT_AUDIENCE: '制御エンジニア', RECRUITING_CONTEXT: '公開可能な制御の検証課題' });
+  context.readTable = () => [...structuredClone(themes), { theme: '制御の検証', category: 'evergreen', weight: 1 }];
+  context.askAIJson = (system, user) => {
+    const input = JSON.parse(user);
+    assert.equal(input.count, 2);
+    assert.equal(input.recruiting.audience, '制御エンジニア');
+    assert.equal(input.recruiting.context, '公開可能な制御の検証課題');
+    assert.equal(input.candidates.some(t => t.theme === '休止中'), false);
+    return { themes: [valid.themes[0], { theme: '制御の検証', angle: 'モデルと実機で判断が変わる条件', reason: '対象職種の課題' }] };
+  };
+  const selected = context.pickThemesForShoot();
+  assert.equal(selected.every(t => t.category === 'evergreen'), true);
+});
+
 test('all suspended themes fail without an API request', () => {
   const { context, calls } = sandbox({ OPENAI_API_KEY: 'test-key' });
   context.readTable = () => [{ theme: '休止中', category: 'evergreen', weight: 0 }];
   assert.throws(() => context.pickThemesForShoot(), /選定可能/);
   assert.equal(calls.http.length, 0);
   assert.equal(calls.writes.length, 0);
+});
+
+test('a one-question session selects one theme even with several active candidates', () => {
+  const { context } = sandbox({ OPENAI_API_KEY: 'test-key' });
+  context.readTable = () => structuredClone(themes);
+  context.askAIJson = (system, user) => {
+    assert.equal(JSON.parse(user).count, 1);
+    return { themes: [valid.themes[0]] };
+  };
+  assert.equal(context.pickThemesForShoot(1).length, 1);
 });
 
 test('OpenAI key export still requires both admin token and explicit export permission', () => {
