@@ -24,6 +24,8 @@ function requireDashToken(token) {
  *   approve     承認待ち → 承認済み（次の投稿枠で自動投稿）
  *   reject      承認待ち・承認済み・予約済み → 却下（予約は取り下げ）
  *   publish_now 即時投稿（承認を兼ねる。予約時刻を今にしてActionsを起動）
+ * 一括操作は表示タブの範囲に限定: approve/reject は承認待ち、
+ * publish_now は投稿予約（承認済み・予約済み）。個別の即時投稿は承認を兼ねる。
  */
 function dashShortAction(token, action, target) {
   requireDashToken(token);
@@ -34,6 +36,12 @@ function dashShortAction(token, action, target) {
   };
   var statuses = ALLOWED[action];
   if (!statuses) return '不明な操作です: ' + action;
+  if (target === 'all') {
+    // 個別操作の許可範囲をそのまま使うと、別タブの動画まで操作してしまう。
+    statuses = action === 'publish_now'
+      ? [SHORT_STATUS.APPROVED, SHORT_STATUS.SCHEDULED]
+      : [SHORT_STATUS.STOCK];
+  }
   var rows = readTable(SHEET.SHORTS).filter(function (r) {
     return String(r.kind || 'short') !== 'wide' && statuses.indexOf(String(r.status)) >= 0;
   });

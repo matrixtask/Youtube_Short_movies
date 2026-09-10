@@ -9,6 +9,15 @@ GAS + スプレッドシート + Slack の構成で、サーバー運用は不�
 
 ## セットアップ
 
+### ローカルの回帰テスト
+
+リポジトリルートで `node --test gas/tests/dashboard.test.cjs` を実行します
+（Node.js 24、追加のnpm依存なし）。GASのシート操作・通知・Actions起動を
+スタブ化し、一括操作の対象範囲、個別操作、認証拒否を検証します。
+実際のSlack通知やYouTube投稿は行いません。
+`.github/workflows/test.yml` でPythonの既存テストと合わせてpush/PR時に実行します。
+GAS実環境の表示・通信とYouTube投稿のend-to-end検証は別途必要です。
+
 ### 1. GASプロジェクト
 
 1. [script.google.com](https://script.google.com) で新規プロジェクトを作成し、
