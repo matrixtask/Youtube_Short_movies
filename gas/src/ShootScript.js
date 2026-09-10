@@ -39,7 +39,9 @@ function startDailyShootScript() {
 /** 追加台本。Slackのチャンネルに「台本」と書き込むと開始される */
 function startExtraShootScript() {
   try {
-    startShootScript('svx', ':movie_camera: 追加の撮影台本');
+    var job = startShootScript('svx', ':movie_camera: 追加の撮影台本');
+    notifySlack('台本を受け付けました（' + job.job_id + '）。段階ごとに保存して生成します。進行状況は「台本 状態」で確認できます。');
+    return job;
   } catch (e) {
     // モデル出力やAPIエラー本文は通知しない。投稿済みの部分があっても成功とは伝えない。
     notifySlack(':warning: 台本の作成・送信を完了できませんでした。品質基準を満たす材料不足、応答形式、接続または時間制限を確認してください。具体的な開発判断・比較対象・確かめたいことを台本スレッドのメモに追加すると企画材料になります。記録はLogを確認してください。');
@@ -48,16 +50,14 @@ function startExtraShootScript() {
 }
 
 function startShootScript(kind, title) {
-  var deadline = Date.now() + 240000;
   var count = Number(getProp('SHOOT_QUESTIONS', '5'));
   if (!Number.isInteger(count) || count < 1 || count > 10) throw new Error('SHOOT_QUESTIONSは1〜10の整数にしてください');
-  var themes = pickThemesForShoot(Math.min(2, count));
-  var recentNotes = collectRecentNotes(5);
-  var questions = generateShootQuestions(themes, count, recentNotes, deadline);
+  return enqueueShootScript(kind, title, count);
+}
 
-  var scriptId = fmtDate(nowJst()) + '_' + newId(kind);
-  var intro = [
-    title + '（' + questions.length + '問）',
+function shootScriptIntro(title, themes, count) {
+  return [
+    title + '（' + count + '問）',
     'テーマ: ' + themes.map(function (t) { return t.theme + '（' + labelForCategory(t.category) + '）'; }).join(' / '),
     '',
     '撮り方: 横向きで、1問ずつ撮影してください。1本の動画で通しでOK。',
@@ -67,40 +67,24 @@ function startShootScript(kind, title) {
     '言い直しや間は後で編集できます。各回答の前後には短い間を空けてください。',
     '撮り終わったら *このスレッドに動画をそのまま投稿* してください。あとは全部自動です。',
   ].join('\n');
-  var parent = sendSlack(intro);
-  var threadTs = parent.ts;
-
-  appendRowObj(SHEET.SCRIPTS, {
-    script_id: scriptId,
-    created_at: fmtDateTime(nowJst()),
-    thread_ts: 'ts_' + threadTs, // 'ts_'接頭辞でシートの数値化（精度落ち）を防ぐ
-    themes: themes.map(function (t) { return t.theme; }).join(' / '),
-    status: SCRIPT_STATUS.OPEN,
-    shot_at: '',
-    processed_at: '',
-    note: '',
-  });
-
-  questions.forEach(function (q, idx) {
-    appendRowObj(SHEET.QUESTIONS, {
-      script_id: scriptId,
-      idx: idx + 1,
-      theme: q.theme,
-      category: q.category,
-      question: q.question,
-      neta: q.neta || '',
-      hint: q.hint || '',
-    });
-  });
-
-  shootQuestionMessages(questions).forEach(function (message) {
-    // カード/メモの連続投稿を1秒以上空ける（チャンネル単位のバーストを避ける）。
-    Utilities.sleep(1000);
-    sendSlack(message, threadTs);
-  });
-  logEvent('script_start', scriptId + ' themes=' + JSON.stringify(themes));
 }
 
+function shootQuestionInput(themes, count, recentNotes) {
+  return { themes: themes, count: count, channel: getProp('CHANNEL_CONCEPT', '中井佑の、とにかく早く移動したい！'),
+    recent_notes: recentNotes, recent_questions: collectRecentQuestions(30),
+    theme_insights: getProp('THEME_INSIGHTS', ''), script_insights: getProp('SCRIPT_INSIGHTS', ''), recruiting: recruitingContext() };
+}
+
+function logShootEditorial(editorial) {
+  logEvent('script_editorial', JSON.stringify({ version: 'speaking-card-v2', perspectives: editorial.discussion.perspectives,
+    resolution: editorial.discussion.resolution, critique: editorial.review.critique,
+    selected: editorial.review.selected.map(function (s) { return { id: s.pitch.id, title: s.pitch.title,
+      novelty: s.novelty, specificity: s.specificity, recruiting: s.recruiting,
+      depth: s.depth, speakability: s.speakability, clarity: s.clarity, reason: s.reason, revision: s.revision }; }),
+    rejected: editorial.review.rejected }));
+}
+
+/** 旧同期呼び出しの互換ヘルパー。通常のSlack/日次生成はScriptJobsで段階実行する。 */
 function generateShootQuestions(themes, count, recentNotes, deadline) {
   if (!Number.isInteger(count) || count < 1 || count > 10 || !themes.length || themes.length > count) {
     throw new Error('SHOOT_QUESTIONSはテーマ数以上、1〜10の整数にしてください');
@@ -121,12 +105,7 @@ function generateShootQuestions(themes, count, recentNotes, deadline) {
     checkEditorialTime(deadline, 0);
     try {
       var questions = validateShootQuestions(parseJsonLoose(text), themes, count, recent, editorial.review);
-      logEvent('script_editorial', JSON.stringify({ version: 'speaking-card-v2', perspectives: editorial.discussion.perspectives,
-        resolution: editorial.discussion.resolution, critique: editorial.review.critique,
-        selected: editorial.review.selected.map(function (s) { return { id: s.pitch.id, title: s.pitch.title,
-          novelty: s.novelty, specificity: s.specificity, recruiting: s.recruiting,
-          depth: s.depth, speakability: s.speakability, clarity: s.clarity, reason: s.reason, revision: s.revision }; }),
-        rejected: editorial.review.rejected }));
+      logShootEditorial(editorial);
       logEvent('script_quality', 'questions=' + questions.length + ' repair=' + attempt + ' recent=' + recent.length);
       return questions;
     } catch (e) {
@@ -152,6 +131,7 @@ function collectRecentNotes(limit) {
  */
 function handleScriptReply(threadTs, text) {
   var trimmed = String(text || '').trim();
+  if (handleShootJobCommand(trimmed, threadTs)) return true;
 
   // コマンドは台本の有無に関係なく効かせる（フリートーク動画のスレッドなど）
   if (handleApprovalCommand(trimmed)) return true;
@@ -199,6 +179,7 @@ function handleScriptReply(threadTs, text) {
  */
 function handleChannelMessage(text) {
   var trimmed = String(text || '').trim();
+  if (handleShootJobCommand(trimmed)) return true;
   if (handleApprovalCommand(trimmed)) return true;
   if (/^(台本|撮影|インタビュー|script)$/i.test(trimmed)) {
     startExtraShootScript();

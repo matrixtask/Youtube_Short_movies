@@ -5,6 +5,7 @@ const { themes, question, valid, sandbox, responseFor } = require('./editorial-f
 test('validated structure survives storage and appears in Slack using existing columns', () => {
   const { context, calls } = sandbox();
   context.startShootScript('sv', '今日の撮影台本');
+  context.drainShootJobs();
   const questions = calls.writes.filter(([sheet]) => sheet === 'Questions').map(([, row]) => row);
   assert.equal(questions.length, 2);
   assert.deepEqual(Object.keys(questions[0]).sort(), ['script_id', 'idx', 'theme', 'category', 'question', 'neta', 'hint'].sort());
@@ -100,7 +101,7 @@ test('overlong speech fails and retries before any script is delivered', () => {
     raw[0].hypotheses.forEach(h => { for (const k of Object.keys(h)) h[k] += '長'.repeat(65); });
     return JSON.stringify(raw);
   };
-  assert.throws(() => context.startShootScript('sv', 'test'), /650字/);
+  assert.throws(() => context.generateShootQuestions(themes, 2, []), /650字/);
   assert.equal(attempts, 2);
   assert.equal(calls.writes.length, 0);
   assert.equal(calls.slack.length, 0);
@@ -162,7 +163,7 @@ test('invalid answer repairs once; repeated failure creates no partial script or
     if (!system.includes('STAGE: script_writing')) return JSON.stringify(responseFor(system));
     attempts++; return '[]';
   };
-  assert.throws(() => context.startShootScript('sv', 'test'), /品質検証/);
+  assert.throws(() => context.generateShootQuestions(themes, 2, []), /品質検証/);
   assert.equal(attempts, 2);
   assert.equal(calls.writes.length, 0);
   assert.equal(calls.slack.length, 0);
@@ -233,23 +234,26 @@ test('a long escaped question splits without losing text, HTML entities or emoji
 test('all split script messages are sent to the same parent thread', () => {
   const { context, calls } = sandbox();
   const generated = valid().map(q => ({ ...q, hint: '比較&🚀'.repeat(600) }));
-  context.generateShootQuestions = () => generated;
-  context.startShootScript('sv', '今日の台本');
+  const job = context.startShootScript('sv', '今日の台本');
+  job.stage = 'parent';
+  Object.assign(job.data, { questions: generated, input: { themes }, intro: '今日の台本', messages: context.shootQuestionMessages(generated) });
+  context.withShootJobLock(() => context.writeShootJob(job));
+  context.drainShootJobs();
   const expected = Array.from(context.shootQuestionMessages(generated));
   assert.ok(expected.length > 1);
   assert.equal(calls.slack.length, expected.length + 1);
   assert.deepEqual(calls.slack.slice(1).map(([message]) => message), expected);
   assert.ok(calls.slack.slice(1).every(([message, thread]) => message.length <= 3500 && thread === '123.456'));
-  assert.deepEqual(calls.delivery, [['send'], ...expected.flatMap(() => [['sleep', 1000], ['send']])]);
+  assert.deepEqual(calls.delivery, Array.from({ length: expected.length + 1 }).flatMap(() => [['sleep', 1000], ['send']]));
   assert.equal(calls.writes.filter(([sheet]) => sheet === 'Questions').length, 2);
 });
 
-test('extra-script failure reports a fixed notice once without exposing API content or storing questions', () => {
+test('enqueue failure reports a fixed notice once without exposing error content or storing questions', () => {
   const notices = [];
   for (const detail of ['HTTP 401 PRIVATE_API_BODY', 'MODEL_OUTPUT_DO_NOT_PUBLISH']) {
     const { context, calls } = sandbox();
     const failure = new Error(detail);
-    context.askAI = () => { throw failure; };
+    context.enqueueShootScript = () => { throw failure; };
     assert.throws(() => context.startExtraShootScript(), error => error === failure);
     assert.equal(calls.notifications.length, 1);
     assert.doesNotMatch(calls.notifications[0], /PRIVATE_API_BODY|MODEL_OUTPUT_DO_NOT_PUBLISH|401/);
@@ -266,12 +270,11 @@ test('one requested question selects only one theme and reaches generation with 
   let pickedCount;
   context.getProp = (key, fallback) => key === 'SHOOT_QUESTIONS' ? '1' : fallback;
   context.pickThemesForShoot = count => { pickedCount = count; return [themes[0]]; };
-  context.generateShootQuestions = (picked, count) => {
-    assert.deepEqual(picked, [themes[0]]);
-    assert.equal(count, 1);
-    return [question()];
-  };
   context.startShootScript('sv', '一問');
+  context.runShootScriptJobs();
+  const input = context.readShootJobs()[0].data.input;
+  assert.equal(input.count, 1);
+  assert.deepEqual(Array.from(input.themes, t => ({ ...t })), [themes[0]]);
   assert.equal(pickedCount, 1);
 });
 

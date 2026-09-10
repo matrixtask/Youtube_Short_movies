@@ -1,6 +1,6 @@
 # HANDOFF.md — AI引き継ぎ資料
 
-> **2026-09-11 最新**: Astra対応と採用企画改善は `b0496d6` までmain/既存作業ブランチへ反映済み。今回の撮影カード実装は下記「撮影カードへの反映」を参照。GASは運用機でのデプロイが別途必要。下記の過去ログにある「未push」は当時の状態。仕様は [SCRIPT_GUIDE.md](SCRIPT_GUIDE.md)、[SCRIPT_CARD_DESIGN.md](SCRIPT_CARD_DESIGN.md)、キー設定は [ASTRA_SETUP.md](ASTRA_SETUP.md)。
+> **2026-09-11 最新**: 撮影カード実装は `4d21140` までmain/既存作業ブランチへ反映済み。今回の全体240秒超過への対応は下記「台本生成の分割実行」と [SCRIPT_JOBS.md](SCRIPT_JOBS.md)。GASは運用機でのデプロイが別途必要。下記の過去ログにある「未push」は当時の状態。台本仕様は [SCRIPT_GUIDE.md](SCRIPT_GUIDE.md)、キー設定は [ASTRA_SETUP.md](ASTRA_SETUP.md)。
 
 > **宛先**: このリポジトリを一時的に運用するAIアシスタント(ChatGPT等)へ。
 > **書き手**: Claude (Fable 5)。ここまでの全システムを設計・実装した。
@@ -15,7 +15,7 @@ cd ~/Youtube_Short_movies        # ユーザーのローカルPCでのパス
 git pull
 make help                        # 操作コマンド一覧
 make test                        # pytest 154件（撮影カード対応を含む）
-node --test gas/tests/*.test.cjs   # GAS 69件（Node.js 24）
+node --test gas/tests/*.test.cjs   # GAS 85件（Node.js 24）
 make dash                        # ダッシュボードが開くこと(開けばGASは健在)
 ```
 
@@ -49,6 +49,7 @@ make dash                        # ダッシュボードが開くこと(開け�
 |---|---|---|
 | Scripts | 撮影台本(1回=1行) | `open`(撮影待ち) → `shot`(撮影済) → `done` / `expired` |
 | Questions | 台本内の質問(1問=1行) | — |
+| ScriptJobs | 生成段階・保存済み入力/結果・送信位置 | `queued` → `running` → 次段階の`queued` / `done`、失敗時`failed` / `needs_review` |
 | Videos | 投稿された動画の処理キュー | `pending` → `processing`(claim中) → `done` / `failed`。再編集で`pending`に戻る |
 | Shorts | 生成済みショート台帳(実体はSlack上のファイル) | `stock`(承認待ち) → `approved` → `scheduled`(投稿枠割当) → `published` / `rejected` / `failed` |
 | Themes | トークテーマと重み(自己調整される) | weight 0 = 休止 |
@@ -61,6 +62,7 @@ make dash                        # ダッシュボードが開くこと(開け�
 | 発言 | 動作 |
 |---|---|
 | `台本` (撮影/インタビュー/script) | 臨時の撮影台本を生成 |
+| `台本 状態` / `台本 再開 <ジョブID>` | 進行状況確認 / 失敗段階から再開 |
 | `まとめて` (まとめ/compile) | ショートからまとめ動画を生成 |
 | `承認 <コード>` / `承認 全部` / `却下 <コード>` | ショートの承認・却下 |
 
@@ -206,6 +208,16 @@ make gpu-check   # GPUが効いているか確認
 - カード/メモを分離して投稿数が増えるため、このバッチ内は1秒以上間隔を空けて送る。他の実行との全体排他や429時の自動再送は未実装。送信途中の失敗は従来どおり一部配信済みになり得る。
 - 検証: GAS 69件、Python 154件成功。保存往復後のカード/メモ分離、全仮説項目の読み上げ表示、穴埋め拒否、6軸品質判定、旧データ、文字数/メンション対策、前段失敗時の無配信をスタブで確認。本文の意味・実API生成品質・読み上げ時間・GAS応答時間・採用効果は未測定。
 - mainと `claude/youtube-short-auto-pipeline-d1z54a` へ既存履歴を維持して統合し、両参照とCIを確認する。運用機では `cd ~/Youtube_Short_movies && git pull --ff-only && make gas-deploy`。この作業では実APIの生成、Slack送信、GASデプロイは行っていない。
+
+### 台本生成の分割実行(2026-09-11)
+- ユーザーの1:29のLogに `台本生成の時間予算に達しました` が記録された。原因は旧startShootScriptがテーマ選定から執筆まで共有する240秒と残り30秒の予算。今回、通常のSlack/日次生成はenqueueのみとし、`ScriptJobs.js` の1分トリガーで1実行1AI段階に分離した。3者・ミア・思考の強度・質問数・採点基準・API providerを維持。
+- 新しいScriptJobsシートへ入力/会議/批評/台本/配信位置を永続保存。既存Scripts/Questions列は変更なし。各チェックポイントは全列1回更新、長いJSONは8セル（各約3万文字）へ分割。Script Propertiesに大量の台本文を置かない。完了時だけ大きな入力を保存対象から外す。
+- `themes` → `discussion` → `review` → `writing` → `parent`（台本行保存も実施）→ `delivery`。テーマJSON不良と執筆の形式不良は、それぞれ別実行で1回だけ修復。API/会議/批評の失敗は止めて通知し、`台本 再開 <ジョブID>` で保存済み位置から再開する。`台本 状態` は直近5ジョブを表示。
+- 実行権と短時間ロックでワーカーを直列化。8分を過ぎたrunningを実行中断として検知する。GASの1実行6分やトリガーの日次割当自体は変わらない。旧同期ヘルパーgenerateShootQuestions/runEditorialRoomは既存呼び出し互換用に残すが通常経路は使わない。
+- 配信前に送信位置を保存し、SlackのACK後に次位置へ更新。成否不明はneeds_reviewで停止し、自動再送しない。台本行はscript_id、質問行はscript_id/idxで保存済み行を確認する。管理者の照合後の復旧はSCRIPT_JOBS.md。旧版で失敗した台本の途中結果は保存されていないので復元不可。
+- `script_stage_start/done/failed/interrupted` にjob_id・stage・attempt・elapsed_ms・status・next_stageを記録。生のモデル出力/HTTPエラー本文を失敗ログへ転記しない。初回受付時にワーカートリガーを遅延登録し、installTriggersにも含めた。新規本番依存・秘密情報・既存デプロイIDの変更なし。
+- 検証: GAS 85件・Python 154件成功。合計320秒の模擬生成を別VM/保存データのみで継続、重複tick、形式修復の分割、失敗位置からの再開、8分後の中断検知、絵文字を含む分割保存、行保存/Slack ACK後/最終完了保存の失敗をスタブで確認。実GASのトリガー・権限・API・Slackは未検証。
+- mainと既存作業ブランチへ履歴を維持して統合・pushし、CIを確認する。運用機で `cd ~/Youtube_Short_movies && git pull --ff-only && make gas-deploy`、その後「台本」を新規依頼して段階別Logを確認する。
 
 ### 引き継ぎログ
 - 2026-09-10 Claude: 本引き継ぎ資料を作成。ここまでの実装は`git log`参照。

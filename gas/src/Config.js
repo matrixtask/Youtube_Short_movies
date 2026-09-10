@@ -34,6 +34,7 @@
 var SHEET = {
   SCRIPTS: 'Scripts', // 撮影台本（セッション単位）
   QUESTIONS: 'Questions', // 台本内の質問（1行=1問）
+  SCRIPT_JOBS: 'ScriptJobs', // 段階ごとの生成結果・再開位置（既存台本とは別管理）
   VIDEOS: 'Videos', // Slackに投げられた撮影動画の処理キュー
   SHORTS: 'Shorts', // 生成済みショートの台帳（実体はSlack上のファイル）
   THEMES: 'Themes',

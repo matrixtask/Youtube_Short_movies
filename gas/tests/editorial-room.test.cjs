@@ -37,7 +37,7 @@ for (const failureStage of [0, 1]) {
         if (failure === 'api') throw new Error('HTTP 429');
         return failure === 'json' ? 'not JSON' : '{}';
       };
-      assert.throws(() => context.startShootScript('sv', 'test'), failure === 'api' ? /429/ : /編集会議|広報批評/);
+      assert.throws(() => context.generateShootQuestions(themes, 2, []), failure === 'api' ? /429/ : /編集会議|広報批評/);
       assert.equal(requests, failureStage + 1);
       assert.equal(calls.writes.length, 0);
       assert.equal(calls.slack.length, 0);
@@ -154,7 +154,7 @@ test('writer API failure is not retried and creates no partial delivery', () => 
     if (requests === 3) throw new Error('HTTP 503');
     return JSON.stringify(responseFor(system));
   };
-  assert.throws(() => context.startShootScript('sv', 'test'), /503/);
+  assert.throws(() => context.generateShootQuestions(themes, 2, []), /503/);
   assert.equal(requests, 3);
   assert.equal(calls.writes.length, 0);
   assert.equal(calls.slack.length, 0);
@@ -192,7 +192,7 @@ for (const expireAfter of [1, 2, 3]) {
       if (requests === expireAfter) now = 241001;
       return JSON.stringify(requests === 3 ? [] : responseFor(system));
     };
-    assert.throws(() => context.startShootScript('sv', 'test'), /時間予算/);
+    assert.throws(() => context.generateShootQuestions(themes, 2, []), /時間予算/);
     assert.equal(requests, expireAfter);
     assert.equal(calls.writes.length, 0);
     assert.equal(calls.slack.length, 0);
@@ -227,7 +227,7 @@ test('a successful writer response arriving past the deadline is never saved or 
     if (requests === 3) now = 241001;
     return JSON.stringify(responseFor(system));
   };
-  assert.throws(() => context.startShootScript('sv', 'test'), /時間予算/);
+  assert.throws(() => context.generateShootQuestions(themes, 2, []), /時間予算/);
   assert.equal(requests, 3);
   assert.equal(calls.writes.length, 0);
   assert.equal(calls.slack.length, 0);

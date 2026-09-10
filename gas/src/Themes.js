@@ -74,7 +74,7 @@ function addNewThemes() {
  * 撮影日のテーマを選ぶ。カテゴリ固定をせず最大2テーマ。
  * ネタ枠を埋めるより採用候補者にとっての発見を優先する。
  */
-function pickThemesForShoot(maxThemes) {
+function pickThemesForShoot(maxThemes, singleAttempt) {
   var all = readTable(SHEET.THEMES);
   if (!all.length) throw new Error('Themesシートが空です。setupSpreadsheet() を実行してください');
 
@@ -91,7 +91,7 @@ function pickThemesForShoot(maxThemes) {
     return w;
   }
 
-  var picked = selectThemesWithAI(all.filter(function (t) { return effectiveWeight(t) > 0; }), maxThemes);
+  var picked = selectThemesWithAI(all.filter(function (t) { return effectiveWeight(t) > 0; }), maxThemes, singleAttempt);
 
   picked.forEach(function (t) {
     updateRowsWhere(SHEET.THEMES, 'theme', t.theme, { last_used: fmtDate(now) });
@@ -102,7 +102,7 @@ function pickThemesForShoot(maxThemes) {
 }
 
 /** 候補名は変更しない。テーマDBとの実績対応を維持して切り口だけ具体化する。 */
-function selectThemesWithAI(candidates, maxThemes) {
+function selectThemesWithAI(candidates, maxThemes, singleAttempt) {
   candidates = candidates.filter(function (t) { return ['evergreen', 'news', 'neta'].indexOf(String(t.category)) >= 0; });
   if (!candidates.length) throw new Error('選定可能なテーマがありません（weight/categoryを確認）');
   var count = Math.min(maxThemes === undefined ? 2 : maxThemes, candidates.length);
@@ -121,7 +121,7 @@ function selectThemesWithAI(candidates, maxThemes) {
         last_used: String(t.last_used || '') };
     }),
   };
-  var result = askAIJson([
+  var system = [
     'あなたは採用につながるYouTubeショートの企画編集者です。入力のcandidatesからcount件、異なるテーマを選びます。',
     '採用候補者に新しい発見、当事者の具体的な判断、関わりたくなる仕事の問いを示せる候補を優先してください。',
     'カテゴリの割当は固定しません。定番2件でもよく、笑いやランキング枠を埋めるために弱いテーマを選ばない。',
@@ -132,7 +132,16 @@ function selectThemesWithAI(candidates, maxThemes) {
     'ニュースの事実・数値・本人の体験は捏造せず、未確認なら本人に確認する聞き方にしてください。',
     'themeは候補と完全一致。angleには撮影で答えやすい具体的な切り口を1文、reasonには選定理由を1文。',
     'JSON: {"themes":[{"theme":"候補名","angle":"切り口","reason":"選定理由"}]}。',
-  ].join('\n'), JSON.stringify(input), 2500);
+  ].join('\n');
+  // 非同期ワーカーは1実行1API。JSON修復の再呼び出しも同じ実行に詰め込まない。
+  var result;
+  if (singleAttempt) {
+    var text = askAI(system, JSON.stringify(input), 2500);
+    try { result = parseJsonLoose(text); }
+    catch (e) { throw new Error('AIテーマ選定のJSON形式が不正です'); }
+  } else {
+    result = askAIJson(system, JSON.stringify(input), 2500);
+  }
   if (!result || !Array.isArray(result.themes) || result.themes.length !== count) {
     throw new Error('AIテーマ選定の件数が不正です');
   }

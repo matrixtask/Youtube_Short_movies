@@ -56,14 +56,39 @@ function responseFor(system) {
   throw new Error('Unexpected AI stage');
 }
 
-function sandbox(history = []) {
+function sandbox(history = [], sharedTables) {
   const calls = { ai: [], writes: [], slack: [], notifications: [], logs: [], delivery: [] };
+  const tables = sharedTables || { Questions: structuredClone(history), Scripts: [], ScriptJobs: [] };
+  calls.tables = tables;
   const context = vm.createContext({});
-  for (const file of ['Config.js', 'Pure.js', 'EditorialRoom.js', 'ScriptQuality.js', 'ShootScript.js']) {
+  for (const file of ['Config.js', 'Pure.js', 'Sheets.js', 'EditorialRoom.js', 'ScriptQuality.js', 'ShootScript.js', 'ScriptJobs.js']) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, '../src', file), 'utf8'), context);
   }
   context.getProp = (key, fallback = '') => key === 'SHOOT_QUESTIONS' ? '2' : fallback;
-  context.readTable = () => structuredClone(history);
+  context.readTable = sheet => structuredClone(tables[sheet] || []).map((r, i) => ({ ...r, _row: i + 2 }));
+  context.getSheet = sheet => ({
+    getLastRow: () => (tables[sheet] || []).length + 1,
+    getMaxRows: () => 1000,
+    insertRowsAfter() {},
+    getRange: row => ({ setValues: values => {
+      const obj = Object.fromEntries(Array.from(context.SHEET_HEADERS[sheet]).map((h, i) => [h, values[0][i]]));
+      (tables[sheet] ||= [])[row - 2] = structuredClone(obj);
+    } }),
+  });
+  context.SpreadsheetApp = { flush() {} };
+  let locked = false;
+  context.LockService = { getScriptLock: () => ({
+    tryLock: () => { if (locked) return false; locked = true; return true; },
+    releaseLock: () => { locked = false; },
+  }) };
+  calls.triggers = [];
+  context.ScriptApp = {
+    getProjectTriggers: () => calls.triggers.map(name => ({ getHandlerFunction: () => name })),
+    newTrigger: name => ({ timeBased: () => ({ everyMinutes: minutes => ({ create: () => {
+      if (minutes !== 1) throw new Error('Expected minute worker');
+      calls.triggers.push(name);
+    } }) }) }),
+  };
   context.askAI = (system, user, limit) => {
     calls.ai.push({ system, user, limit });
     return JSON.stringify(responseFor(system));
@@ -74,12 +99,22 @@ function sandbox(history = []) {
   context.nowJst = () => new Date('2026-09-11T12:00:00Z');
   context.fmtDate = () => '2026-09-11';
   context.fmtDateTime = () => '2026-09-11 21:00:00';
-  context.newId = () => 'sv_test';
+  context.newId = kind => kind + '_test_' + (tables.ScriptJobs.length + 1);
   context.labelForCategory = cat => cat;
   context.Utilities = { sleep: ms => calls.delivery.push(['sleep', ms]) };
   context.sendSlack = (...args) => { calls.slack.push(args); calls.delivery.push(['send']); return { ts: '123.456' }; };
   context.notifySlack = message => calls.notifications.push(message);
-  context.appendRowObj = (...args) => calls.writes.push(args);
+  context.appendRowObj = (sheet, obj) => {
+    calls.writes.push([sheet, obj]);
+    (tables[sheet] ||= []).push(structuredClone(obj));
+  };
+  context.drainShootJobs = () => {
+    for (let i = 0; i < 20; i++) {
+      if (!context.readShootJobs().some(j => j.status === 'queued')) return;
+      context.runShootScriptJobs();
+    }
+    throw new Error('Worker did not finish');
+  };
   return { context, calls };
 }
 

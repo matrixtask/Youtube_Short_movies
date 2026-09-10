@@ -5,6 +5,8 @@
 var SHEET_HEADERS = {
   Scripts: ['script_id', 'created_at', 'thread_ts', 'themes', 'status', 'shot_at', 'processed_at', 'note'],
   Questions: ['script_id', 'idx', 'theme', 'category', 'question', 'neta', 'hint'],
+  ScriptJobs: ['job_id', 'created_at', 'updated_at', 'status', 'stage', 'started_ms', 'attempt', 'thread_ts', 'next_message', 'error',
+    'payload_1', 'payload_2', 'payload_3', 'payload_4', 'payload_5', 'payload_6', 'payload_7', 'payload_8'],
   Videos: ['video_id', 'created_at', 'script_id', 'thread_ts', 'file_id', 'file_name', 'url_private', 'size', 'status', 'processed_at', 'claimed_at', 'claimed_by', 'instructions'],
   Shorts: ['short_id', 'created_at', 'video_id', 'script_id', 'title', 'score', 'duration', 'slack_file_id', 'url_private', 'status', 'scheduled_at', 'youtube_url', 'published_at', 'kind', 'question_idx', 'thumb', 'views', 'likes', 'stats_at', 'visual_score'],
   Themes: ['theme', 'category', 'weight', 'last_used', 'notes', 'hits', 'misses'],

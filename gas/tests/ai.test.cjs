@@ -193,6 +193,17 @@ test('a one-question session selects one theme even with several active candidat
   assert.equal(context.pickThemesForShoot(1).length, 1);
 });
 
+test('worker theme selection makes one API call even when JSON is invalid', () => {
+  const { context, calls } = sandbox({ OPENAI_API_KEY: 'test-key' });
+  context.readTable = () => structuredClone(themes);
+  let requests = 0;
+  context.askAI = () => { requests++; return 'invalid JSON'; };
+  context.askAIJson = () => { throw new Error('Must not use inline JSON retries'); };
+  assert.throws(() => context.pickThemesForShoot(1, true), /JSON形式/);
+  assert.equal(requests, 1);
+  assert.equal(calls.writes.length, 0);
+});
+
 test('OpenAI key export still requires both admin token and explicit export permission', () => {
   const properties = { OPENAI_API_KEY: 'test-key', ADMIN_TOKEN: 'test-admin', OPENAI_MODEL: 'gpt-6-astra' };
   const { context } = sandbox(properties);
