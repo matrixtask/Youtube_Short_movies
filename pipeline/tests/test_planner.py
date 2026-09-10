@@ -27,6 +27,17 @@ class TestPlannerPrompt:
         assert "予定であり発話の証拠ではない" in prompt
         assert "実際に話されなかった答えや数字を字幕で補わない" in prompt
 
+    def test_card_and_memo_remain_guidance_with_optional_dissent(self):
+        hint = "【撮影カード v2】\n【読む】\n仮に同じ需要で比較します。\n【ここから自分の考え・任意】\n【戻って読む】\n条件まで含む設計です。\n\n【制作メモ・読み上げない】\n混合案も残る。"
+        transcript = {"duration": 60.0, "segments": [
+            {"start": 1, "end": 5, "text": "私は両案とも保留します。"}]}
+        prompt = build_planner_prompt(transcript, Config(), [{"idx": 1, "question": "配置をどう考える？", "hint": hint}])
+        assert hint in prompt
+        assert "制作メモから発話を補わない" in prompt
+        assert "任意発言の省略は正常" in prompt
+        assert "本人の反論・保留・別案は録画の意味に従って残す" in prompt
+        assert "私は両案とも保留します。" in prompt
+
 
 def make_short(**over):
     s = {

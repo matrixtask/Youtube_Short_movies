@@ -10,9 +10,15 @@ function question(overrides = {}) {
     question: '所要時間が短い案を選ばないのは、どんな条件ですか？',
     format: 'decision', viewer_value: '所要時間を比べる基準が分かる',
     opening: '所要時間だけでは、移動の良し悪しは決められるでしょうか。',
-    beats: ['短い案と、余裕を持たせる案を比べます。', 'もし遅れが次の工程に伝わるなら、比較する条件が変わります。',
-      '[本人確認: 実際の判断条件]を確かめるには、何を測るでしょうか。'],
-    closing: '次の工程まで含めて比べる。そのために必要な測定は何でしょうか。', visual: '',
+    premise: '仮に同じ需要と到着期限で、区間の速さと遅れへの余裕を比べます。',
+    hypotheses: [
+      { statement: '一つは、区間の所要時間を短くする案。', reason: '遅れなければ早く着けます。',
+        weakness: 'ただし後工程への遅れが伝わりやすくなります。', reconsider: '遅れが繰り返し伝わるなら、余裕を増やします。' },
+      { statement: 'もう一つは、途中に余裕を置く案。', reason: '遅れを途中で吸収できます。',
+        weakness: 'ただし順調なときも待ち時間が増えます。', reconsider: '余裕を使わない日が続くなら、短縮を検討します。' },
+    ],
+    closing: '区間の速さと遅れの伝わり方。どんな観測なら見直すかまで含めた設計です。', visual: '',
+    alternative: '全区間を一律にせず、遅れの伝わりやすい部分だけ余裕を置く案もある。',
     follow_up: '予定外の遅れがあると、どこへの影響を見ますか？', neta: '', ...overrides };
 }
 
@@ -22,7 +28,7 @@ function valid() {
 }
 
 function discussion() {
-  return { perspectives: ['rei', 'sebastian', 'scipio'].map(role => ({ role,
+  return { perspectives: ['rei', 'sebastian', 'hannibal'].map(role => ({ role,
     objection: '速さだけを評価すると後工程への影響を見落とす。', revision: '遅れの伝わり方を比較する。' })),
     resolution: '比較と確認事項を具体化する。逆転は必須にしない。',
     pitches: Array.from({ length: 4 }, (_, i) => ({ id: 'p' + (i + 1), ...themes[i % 2],
@@ -37,6 +43,7 @@ function discussion() {
 function review() {
   return { critique: '逆転を演出せず、判断条件と必要な計測を見せる。',
     selected: ['p1', 'p2'].map(pitch_id => ({ pitch_id, novelty: 4, specificity: 5, recruiting: 4,
+      depth: 5, speakability: 4, clarity: 4,
       reason: '全体の速さという発見、二案の比較、測定の仕事への接続がある。',
       revision: '同じ図で二案を比べ、最後に次に測る項目を問う。' })),
     rejected: ['p3', 'p4'].map(pitch_id => ({ pitch_id, reason: '採用案と比較の論点が重複する。' })) };
@@ -50,7 +57,7 @@ function responseFor(system) {
 }
 
 function sandbox(history = []) {
-  const calls = { ai: [], writes: [], slack: [], notifications: [], logs: [] };
+  const calls = { ai: [], writes: [], slack: [], notifications: [], logs: [], delivery: [] };
   const context = vm.createContext({});
   for (const file of ['Config.js', 'Pure.js', 'EditorialRoom.js', 'ScriptQuality.js', 'ShootScript.js']) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, '../src', file), 'utf8'), context);
@@ -69,7 +76,8 @@ function sandbox(history = []) {
   context.fmtDateTime = () => '2026-09-11 21:00:00';
   context.newId = () => 'sv_test';
   context.labelForCategory = cat => cat;
-  context.sendSlack = (...args) => { calls.slack.push(args); return { ts: '123.456' }; };
+  context.Utilities = { sleep: ms => calls.delivery.push(['sleep', ms]) };
+  context.sendSlack = (...args) => { calls.slack.push(args); calls.delivery.push(['send']); return { ts: '123.456' }; };
   context.notifySlack = message => calls.notifications.push(message);
   context.appendRowObj = (...args) => calls.writes.push(args);
   return { context, calls };

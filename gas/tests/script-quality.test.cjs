@@ -9,12 +9,17 @@ test('validated structure survives storage and appears in Slack using existing c
   assert.equal(questions.length, 2);
   assert.deepEqual(Object.keys(questions[0]).sort(), ['script_id', 'idx', 'theme', 'category', 'question', 'neta', 'hint'].sort());
   assert.match(questions[0].hint, /見る人の持ち帰り:/);
-  assert.match(questions[0].hint, /話し出し:/);
-  assert.match(questions[0].hint, /話す順:/);
-  assert.match(questions[0].hint, /締め（約束の回収）:/);
-  assert.match(questions[0].hint, /詰まったら:/);
+  assert.match(questions[0].hint, /【読む】/);
+  assert.match(questions[0].hint, /【ここから自分の考え・任意】/);
+  assert.match(questions[0].hint, /【戻って読む】/);
+  assert.match(questions[0].hint, /さらに考えたいときだけ（回答不要）:/);
   assert.equal(questions[0].neta, '');
-  assert.match(calls.slack[1][0], /所要時間を比べる基準/);
+  assert.match(calls.slack[1][0], /区間の所要時間を短くする案/);
+  assert.equal(calls.slack.length, 5); // parent, two cards, two production memos
+  assert.match(calls.slack[2][0], /^\*Q2\./);
+  assert.match(calls.slack[3][0], /Q1\. 制作メモ/);
+  assert.match(calls.slack[3][0], /所要時間を比べる基準/);
+  assert.doesNotMatch(calls.slack[1][0], /持ち帰り:|対象:|本人確認|制作メモ|演出（任意）/);
   assert.equal(calls.slack[1][1], '123.456');
   assert.doesNotMatch(calls.slack[1][0], /真顔|沈黙/);
 });
@@ -37,6 +42,70 @@ test('latest 30 questions and both learning contexts reach generation', () => {
   assert.equal(writerInput.editorial.review.selected.length, 2);
 });
 
+test('stored cards keep complete spoken hypotheses separate from optional production guidance', () => {
+  const { context } = sandbox();
+  const raw = valid();
+  raw[0].visual = '紙に図を描く';
+  raw[0].neta = '<!channel> 演出は任意';
+  // Simulate the existing sheet/API round trip with no additional columns.
+  const rows = JSON.parse(JSON.stringify(context.validateShootQuestions(raw, themes, 2, [])));
+  const messages = Array.from(context.shootQuestionMessages(rows));
+  assert.equal(messages.length, 4);
+  for (let i = 0; i < 2; i++) {
+    const readLines = messages[i].split('\n').filter(line => line.startsWith('> ')).map(line => line.slice(2));
+    const expected = [raw[i].opening, raw[i].premise,
+      ...raw[i].hypotheses.flatMap(h => [h.statement, h.reason, h.weakness, h.reconsider]), raw[i].closing];
+    assert.deepEqual(readLines, expected);
+    assert.match(messages[i], /支持・反論・保留・別案/);
+    assert.match(messages[i], /追加せず次へ進んでも完成/);
+    assert.doesNotMatch(readLines.join('\n'), /※|本人確認|回答不要|紙に図|演出/);
+    assert.ok(messages[i].length <= 3500);
+    assert.match(messages[i + 2], /制作メモ（読み上げない）/);
+    assert.ok(messages[i + 2].includes(raw[i].alternative));
+  }
+  assert.match(messages[2], /紙に図を描く/);
+  assert.match(messages[2], /&lt;!channel&gt;/);
+  assert.doesNotMatch(messages.join(''), /<!channel>/);
+});
+
+test('unfinished speech, missing reasoning, duplicate hypotheses and unmarked fiction are rejected', () => {
+  const { context } = sandbox();
+  for (const placeholder of ['[本人確認: 数値]', 'TBD', '____', '〇〇', '【読む】混入', '{回答}']) {
+    for (const name of ['opening', 'premise', 'closing']) {
+      const raw = valid(); raw[0][name] = placeholder;
+      assert.throws(() => context.validateShootQuestions(raw, themes, 2, []), /穴埋め/);
+    }
+    for (const name of ['statement', 'reason', 'weakness', 'reconsider']) {
+      const raw = valid(); raw[0].hypotheses[1][name] = placeholder;
+      assert.throws(() => context.validateShootQuestions(raw, themes, 2, []), /穴埋め/);
+    }
+  }
+  for (const name of ['statement', 'reason', 'weakness', 'reconsider']) {
+    const raw = valid(); delete raw[0].hypotheses[0][name];
+    assert.throws(() => context.validateShootQuestions(raw, themes, 2, []), new RegExp(name));
+  }
+  const duplicate = valid(); duplicate[0].hypotheses[1].statement = duplicate[0].hypotheses[0].statement;
+  assert.throws(() => context.validateShootQuestions(duplicate, themes, 2, []), /仮説が重複/);
+  const unmarked = valid(); unmarked[0].premise = '実際の会社の三拠点です。';
+  assert.throws(() => context.validateShootQuestions(unmarked, themes, 2, []), /仮想設定/);
+});
+
+test('overlong speech fails and retries before any script is delivered', () => {
+  const { context, calls } = sandbox();
+  let attempts = 0;
+  context.askAI = system => {
+    if (!system.includes('STAGE: script_writing')) return JSON.stringify(responseFor(system));
+    attempts++;
+    const raw = valid();
+    raw[0].hypotheses.forEach(h => { for (const k of Object.keys(h)) h[k] += '長'.repeat(65); });
+    return JSON.stringify(raw);
+  };
+  assert.throws(() => context.startShootScript('sv', 'test'), /650字/);
+  assert.equal(attempts, 2);
+  assert.equal(calls.writes.length, 0);
+  assert.equal(calls.slack.length, 0);
+});
+
 test('rejects repeated questions despite punctuation/fullwidth differences', () => {
   const { context } = sandbox();
   const raw = valid();
@@ -53,7 +122,10 @@ test('rejects missing structure, wrong themes, uncovered themes, and wrong count
     [question({ closing: '' }), valid()[1]],
     [question({ closing: undefined }), valid()[1]],
     [question({ visual: {} }), valid()[1]],
-    [question({ beats: ['one'] }), valid()[1]],
+    [question({ hypotheses: ['one'] }), valid()[1]],
+    [question({ hypotheses: [null, null] }), valid()[1]],
+    [question({ premise: '' }), valid()[1]],
+    [question({ alternative: '' }), valid()[1]],
     [question({ theme: 'invented' }), valid()[1]],
     [question({ category: 'news' }), valid()[1]],
     [question({ question: '長'.repeat(81) }), valid()[1]],
@@ -142,7 +214,7 @@ test('Slack message splitting respects question boundaries and escaped character
   assert.equal(messages[0], context.formatShootQuestion(questions[0], 0));
   assert.equal(messages[1], context.formatShootQuestion(questions[1], 1));
   const short = [{ question: '一問目', hint: '短い補足' }, { question: '二問目', hint: '次の補足' }];
-  assert.equal(context.shootQuestionMessages(short)[0], short.map(context.formatShootQuestion).join('\n\n'));
+  assert.deepEqual(Array.from(context.shootQuestionMessages(short)), short.map(context.formatShootQuestion));
 });
 
 test('a long escaped question splits without losing text, HTML entities or emoji', () => {
@@ -168,6 +240,7 @@ test('all split script messages are sent to the same parent thread', () => {
   assert.equal(calls.slack.length, expected.length + 1);
   assert.deepEqual(calls.slack.slice(1).map(([message]) => message), expected);
   assert.ok(calls.slack.slice(1).every(([message, thread]) => message.length <= 3500 && thread === '123.456'));
+  assert.deepEqual(calls.delivery, [['send'], ...expected.flatMap(() => [['sleep', 1000], ['send']])]);
   assert.equal(calls.writes.filter(([sheet]) => sheet === 'Questions').length, 2);
 });
 

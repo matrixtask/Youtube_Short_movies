@@ -25,9 +25,9 @@ function editorialDiscussionSystem() {
   return [
     'STAGE: editorial_discussion。撮影前の企画会議です。まだ台本を書かないでください。',
     '以下の架空の3人が異論を出し合い、他者の反論を受けて企画を改善してください。実在専門家の検証ではありません。',
-    'rei（レイ）: 技術・具体性・証拠。「誰でも知っている説明」「中身のない逆張り」を退ける。',
-    'sebastian（セバスチャン）: 採用候補者の信頼。実際の仕事の問いを見せ、待遇・職種・権限を捏造しない。',
-    'scipio（スキピオ）: 外部投資家・メンター。事業の大きな目的と、参加者が解きたくなる難問を問う。',
+    'rei（レイ）: 技術・具体性・証拠。共通の前提と評価軸で仮説を比べる。「誰でも知っている説明」「中身のない逆張り」を退ける。',
+    'sebastian（セバスチャン）: 候補者の信頼と話し手の負担。実話の提出や穴埋めなしで話が完結するか。待遇・職種・権限を捏造しない。',
+    'hannibal（ハンニバル）: 一度スキピオに敗れ、敗因を強く内省して転生した架空の軍師。外部投資家・メンターの視点も持つ。局地の勝利と最終目的を分け、資源・補給・時間・組織・協力者・相手の適応・持続性から、判断を変える条件や撤退条件を問う。勝利を保証しない。',
     '各人のobjectionは他の視点への具体的な異論、revisionはそれを受けた改善案を短く。賛同3件だけでは不可。',
     '出力するのは短い編集講評と結論だけ。逐語の思考過程や長い討論記録は不要。',
     '指定のpitch_count件の候補を比較可能にする。各theme/categoryは入力と一致し、各テーマを最低1案含める。',
@@ -35,11 +35,14 @@ function editorialDiscussionSystem() {
     '「早めに確認する」「自分に合う経路」「便利なコツ」だけで終わる企画は不採用。会社名を足しただけでも不可。',
     'audienceの既知の見方から何が新しく分かるかをdiscoveryに書く。誇大な断言や必ず逆転する物語は不要。',
     'conflictは比較・見えにくい制約・判断を変える条件のどれか。developmentは具体物、比較、転換、回収まで作る。',
+    '問いの知的な強度を保つ。下げるのは準備と構成の負担。難しい問いを日常tipsや簡単な二択へ置き換えない。',
+    'developmentには共通の前提、二つの合理的な仮説、各案の理由・弱点・判断を変える条件を準備する。片方だけ条件を変えず、反論・保留・別案の余地を残す。',
+    '仮想設定の説明だけで撮影が完結する企画にする。本人の追加発言は任意。evidence_neededは実話を追加したい場合の確認事項であり、本文の穴埋めや回答の宿題にしない。',
     'recruiting_connectionはこの題材から見える具体的な仕事や未解決の問い。「仲間募集」「会社の魅力」だけでは不足。',
     '事実不足ならevidence_neededに[本人確認: 必要な事実]。架空の実績は作らず、仮説の比較なら仮説と明示する。',
     'recent_questionsと同じ切り口・オチは避ける。入力のメモや過去の学習にある衝撃数字・会社話低頻度は本方針より優先しない。',
     'JSONのみ: {"perspectives":[{"role":"rei","objection":"異論","revision":"改善案"},',
-    '{"role":"sebastian","objection":"異論","revision":"改善案"},{"role":"scipio","objection":"異論","revision":"改善案"}],',
+    '{"role":"sebastian","objection":"異論","revision":"改善案"},{"role":"hannibal","objection":"異論","revision":"改善案"}],',
     '"resolution":"合意と残す対立（200字以内）","pitches":[{"id":"p1","theme":"入力名","category":"入力値",',
     '"title":"動画の企画名（80字以内）","audience":"想定候補者（120字以内）","discovery":"新しい発見（160字以内）",',
     '"conflict":"判断を生む制約（160字以内）","development":"比較から回収までの展開（240字以内）",',
@@ -51,7 +54,7 @@ function editorialDiscussionSystem() {
 function validateEditorialDiscussion(raw, themes, pitchCount) {
   if (!raw || !Array.isArray(raw.perspectives) || raw.perspectives.length !== 3 ||
       !Array.isArray(raw.pitches) || raw.pitches.length !== pitchCount) throw new Error('編集会議の3視点または企画数が不正です');
-  var roles = ['rei', 'sebastian', 'scipio'];
+  var roles = ['rei', 'sebastian', 'hannibal'];
   var perspectives = roles.map(function (role) {
     var matches = raw.perspectives.filter(function (p) { return p && p.role === role; });
     if (matches.length !== 1) throw new Error('編集会議の視点が重複または欠落しています');
@@ -80,20 +83,22 @@ function validateEditorialDiscussion(raw, themes, pitchCount) {
 
 function editorialReviewSystem() {
   return [
-    'STAGE: editorial_pr_review。ユーザー指定の「イーロンの広報担当」役として、企画会議を批評してください。',
-    'これは大胆なミッション訴求を考える架空の広報責任者です。イーロン・マスク本人や実在の担当者の見解・所属・承認を装わない。',
+    'STAGE: editorial_pr_review。ミアとして、企画会議を批評してください。',
+    'ミアは以前の「イーロンの広報担当」役を引き継ぐ架空の広報・クリエイティブ責任者です。実在の人物の見解・所属・承認を装わない。',
     '会議の結論にも異議を唱え、「この人が話す理由」「視聴者の発見」「解きたくなる仕事」が弱い候補は落とす。',
     '自分の批評も点検する。煽りだけ、偽の逆張り、英雄礼賛、裏付けのない成功物語にしていないかを見直す。',
     '出力は短いcritiqueと具体的な採否・修正指示のみ。隠れた思考過程は不要。まだ台本は書かない。',
     'count件だけ採用。各テーマを最低1件。候補を修正してよいが、元のテーマと論点を維持する。',
-    'novelty/specificity/recruitingを各1〜5で採点。各4以上が合格。単に採用数を満たすために採点を上げない。',
+    'novelty/specificity/recruiting/depth/speakability/clarityを各1〜5で別々に採点。各4以上が合格。単に採用数を満たすために採点を上げない。',
     'novelty=対象候補者に新しい具体的発見、specificity=固有の比較や検証可能な問い、recruiting=具体的な仕事への関心。',
-    'reasonには3項目の評価根拠を短く。revisionには書き手が反映する具体的な展開・フックの改善を示す。',
-    '確認情報が足りない場合は事実を捏造せず、本人確認箇所や仮説の比較として成立させる。',
+    'depth=共通の前提で理由・弱点・判断変更条件まで掘れる、speakability=仮想説明だけで完結し本人の回答や実話提出を必須にしない、clarity=読む本文と任意発言と制作メモを分けられる。',
+    'reasonには6軸の評価根拠を短く。revisionには前提の不公平、偽の二択、本人の立場の代筆、隠れた宿題を除く具体的な改善を示す。',
+    '話しやすさのために問いを易しくしたなら不合格。反論・保留・別案を認め、追加なしでも結びが成立するか点検する。',
+    '確認情報が足りない場合は事実を捏造せず、共通の仮想設定で比較を成立させる。採点は企画のモデル評価であり、完成台本や実際の面白さの保証ではない。',
     '改善しても合格する案が足りなければselectedは足りないまま返し、critiqueに不足素材を記す。無難な台本で埋めない。',
     '採らなかった全候補はrejectedにIDと理由を記録。',
     'JSONのみ: {"critique":"会議への批評と自身の修正（240字以内）","selected":[{"pitch_id":"p1",',
-    '"novelty":4,"specificity":4,"recruiting":4,"reason":"3軸の評価根拠（240字以内）","revision":"作り込む展開（240字以内）"}],',
+    '"novelty":4,"specificity":4,"recruiting":4,"depth":4,"speakability":4,"clarity":4,"reason":"6軸の評価根拠（240字以内）","revision":"作り込む展開（240字以内）"}],',
     '"rejected":[{"pitch_id":"p2","reason":"不採用理由（160字以内）"}]}',
   ].join('\n');
 }
@@ -111,10 +116,11 @@ function validateEditorialReview(raw, discussion, themes, count) {
   }
   var selected = raw.selected.map(function (s) {
     var pitch = findPitch(s);
-    ['novelty', 'specificity', 'recruiting'].forEach(function (key) {
+    ['novelty', 'specificity', 'recruiting', 'depth', 'speakability', 'clarity'].forEach(function (key) {
       if (!Number.isInteger(s[key]) || s[key] < 4 || s[key] > 5) throw new Error('広報批評の品質基準に達していません');
     });
     return { pitch: pitch, novelty: s.novelty, specificity: s.specificity, recruiting: s.recruiting,
+      depth: s.depth, speakability: s.speakability, clarity: s.clarity,
       reason: editorialText(s, 'reason', 240), revision: editorialText(s, 'revision', 240) };
   });
   var rejected = raw.rejected.map(function (r) {

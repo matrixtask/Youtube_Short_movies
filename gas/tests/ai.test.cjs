@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const { test } = require('node:test');
+const { question } = require('./editorial-fixtures.cjs');
 
 function sandbox(properties = {}) {
   const calls = { http: [], legacy: 0, writes: [], logs: [] };
@@ -135,11 +136,8 @@ test('Astra selects active candidates with history and sends angles to script ge
   } });
   context.askAI = (system, user) => {
     scriptPrompt = user;
-    return JSON.stringify(picked.map((theme, i) => ({
+    return JSON.stringify(picked.map((theme, i) => question({
       pitch_id: 'p' + (i + 1), theme: theme.theme, category: theme.category, question: '何を変えた？' + i,
-      format: 'decision', viewer_value: '判断基準が分かる', opening: '選択を一言で',
-      beats: ['選択', '理由', '次に使う場面'], follow_up: '何と比べた？', neta: '',
-      closing: '冒頭の判断基準を一言で回収する', visual: '',
     })));
   };
   context.generateShootQuestions(picked, 2, []);

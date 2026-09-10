@@ -1,6 +1,6 @@
 # HANDOFF.md — AI引き継ぎ資料
 
-> **2026-09-10 Codex追記**: Astra対応はローカルの `codex/astra-theme-editing`、実装コミット `e37e7a2`。未push・未デプロイ。キー登録場所と処理仕様は [ASTRA_SETUP.md](ASTRA_SETUP.md)。以下のClaude前提の運用履歴と、本番にまだ反映されていない変更を区別すること。
+> **2026-09-11 最新**: Astra対応と採用企画改善は `b0496d6` までmain/既存作業ブランチへ反映済み。今回の撮影カード実装は下記「撮影カードへの反映」を参照。GASは運用機でのデプロイが別途必要。下記の過去ログにある「未push」は当時の状態。仕様は [SCRIPT_GUIDE.md](SCRIPT_GUIDE.md)、[SCRIPT_CARD_DESIGN.md](SCRIPT_CARD_DESIGN.md)、キー設定は [ASTRA_SETUP.md](ASTRA_SETUP.md)。
 
 > **宛先**: このリポジトリを一時的に運用するAIアシスタント(ChatGPT等)へ。
 > **書き手**: Claude (Fable 5)。ここまでの全システムを設計・実装した。
@@ -14,8 +14,8 @@
 cd ~/Youtube_Short_movies        # ユーザーのローカルPCでのパス
 git pull
 make help                        # 操作コマンド一覧
-make test                        # pytest 152件が通ること（Astra対応を含む）
-node --test gas/tests/*.test.cjs   # GAS 23件（Node.js 24）
+make test                        # pytest 154件（撮影カード対応を含む）
+node --test gas/tests/*.test.cjs   # GAS 69件（Node.js 24）
 make dash                        # ダッシュボードが開くこと(開けばGASは健在)
 ```
 
@@ -196,6 +196,16 @@ make gpu-check   # GPUが効いているか確認
 - 検証: Python 153件・GAS 66件成功、`git diff --check` 成功。段階順序/失敗停止/採否整合/品質閾値/締切/長文分割/1問設定/既存列互換をAPI・シート・Slackのスタブで確認。実APIの所要時間と費用、最終台本の面白さ、応募への効果は未測定。新規本番依存・秘密情報の変更なし。
 - 資料: `SCRIPT_GUIDE.md` / `ASTRA_SETUP.md` / READMEを更新。`SCRIPT_EXAMPLES.md` の2案は会議・批評後のレビュー用発話案で、GAS実行結果や会社の実話ではない。
 - 反映は前回に続きmainと既存作業ブランチへfast-forward/atomic pushし、両CIを確認する。GAS本番反映は運用機の `git pull --ff-only && make gas-deploy` が必要。この作業で実Slackへの投稿・API呼び出し・GASデプロイはしていない。
+
+### 撮影カードへの反映(2026-09-11)
+- ユーザー承認の `SCRIPT_CARD_DESIGN.md` を実装。問いの強度を下げず、前提・論拠・話の流れを用意する。レイ/セバスチャン/ハンニバルの会議→ミアの批評→執筆の3段階を維持。ハンニバルはスキピオに敗れ、敗因を内省して転生した架空の軍師で、外部投資家の視点も持つ。
+- `EditorialRoom.js`: 共通前提・合理的な二つの仮説・弱点・判断変更条件を議論。ミアは発見/具体性/採用接続に加え、深さ/撮影負担/明瞭さを独立採点し全軸4/5以上を要求。点数は企画のモデル評価で、実際の面白さの保証ではない。
+- `ScriptQuality.js`: writerはopening/premise/hypotheses（各statement/reason/weakness/reconsider）/closingと制作メモ項目を返す。仮想設定の明示、2仮説の各項目、読む本文最大650字を検証し、本人確認/TBD等の穴埋め・仮説の重複を拒否。前提の公平性や中立な結びは生成指示で点検するが、意味の正しさを機械検証で保証しない。
+- 保存/APIは既存のtheme/category/question/neta/hintを維持。hintの `【撮影カード v2】` と `【制作メモ・読み上げない】` で分離し、旧自由記述はそのまま表示。新規カードは1問1メッセージ、全カードの後に各問の制作メモ。長いメモ/旧hintはエスケープ後3500文字以内に分割。シート列・データ移行・本番依存の追加なし。
+- `ShootScript.js`: 読む引用部分、読まない案内、任意発言を説明。追加なしでも完成し、支持/反論/保留/別案を許す。Log版は `speaking-card-v2`、6軸の評価を記録。`planner.py` は仮想設定の明示と本人の反論等を残し、制作メモから未発話の内容を補わないよう指示。既存planキャッシュは維持。
+- カード/メモを分離して投稿数が増えるため、このバッチ内は1秒以上間隔を空けて送る。他の実行との全体排他や429時の自動再送は未実装。送信途中の失敗は従来どおり一部配信済みになり得る。
+- 検証: GAS 69件、Python 154件成功。保存往復後のカード/メモ分離、全仮説項目の読み上げ表示、穴埋め拒否、6軸品質判定、旧データ、文字数/メンション対策、前段失敗時の無配信をスタブで確認。本文の意味・実API生成品質・読み上げ時間・GAS応答時間・採用効果は未測定。
+- mainと `claude/youtube-short-auto-pipeline-d1z54a` へ既存履歴を維持して統合し、両参照とCIを確認する。運用機では `cd ~/Youtube_Short_movies && git pull --ff-only && make gas-deploy`。この作業では実APIの生成、Slack送信、GASデプロイは行っていない。
 
 ### 引き継ぎログ
 - 2026-09-10 Claude: 本引き継ぎ資料を作成。ここまでの実装は`git log`参照。

@@ -14,12 +14,16 @@ test('discussion, PR review and writing run in order with validated decisions pa
   assert.equal(inputs[0].pitch_count, 4);
   assert.equal(inputs[0].editorial, undefined);
   assert.equal(inputs[1].discussion.pitches.length, 4);
-  assert.deepEqual(inputs[1].discussion.perspectives.map(p => p.role), ['rei', 'sebastian', 'scipio']);
+  assert.deepEqual(inputs[1].discussion.perspectives.map(p => p.role), ['rei', 'sebastian', 'hannibal']);
   assert.deepEqual(inputs[2].editorial.review.selected.map(s => s.pitch.id), ['p1', 'p2']);
   assert.equal(inputs[2].editorial.review.selected[0].revision, review().selected[0].revision);
   const audit = JSON.parse(calls.logs.find(([event]) => event === 'script_editorial')[1]);
   assert.deepEqual(audit.selected.map(s => s.id), ['p1', 'p2']);
   assert.deepEqual(audit.rejected.map(s => s.pitch_id), ['p3', 'p4']);
+  assert.equal(audit.version, 'speaking-card-v2');
+  assert.equal(audit.selected[0].depth, 5);
+  assert.equal(audit.selected[0].speakability, 4);
+  assert.equal(audit.selected[0].clarity, 4);
 });
 
 for (const failureStage of [0, 1]) {
@@ -43,7 +47,7 @@ for (const failureStage of [0, 1]) {
 
 test('discussion requires the three distinct known perspectives', () => {
   const { context } = sandbox();
-  for (const roles of [['rei', 'sebastian'], ['rei', 'rei', 'scipio'], ['rei', 'sebastian', 'unknown']]) {
+  for (const roles of [['rei', 'sebastian'], ['rei', 'rei', 'hannibal'], ['rei', 'sebastian', 'scipio'], ['rei', 'sebastian', 'unknown']]) {
     const raw = discussion();
     raw.perspectives = roles.map(role => ({ role, objection: '異論', revision: '修正' }));
     assert.throws(() => context.validateEditorialDiscussion(raw, themes, 4), /視点/);
@@ -116,7 +120,7 @@ test('review rejects insufficient quantity, missing themes and incomplete evalua
 test('each quality axis must be an integer from four through five', () => {
   const { context } = sandbox();
   const room = checkedDiscussion(context);
-  for (const axis of ['novelty', 'specificity', 'recruiting']) {
+  for (const axis of ['novelty', 'specificity', 'recruiting', 'depth', 'speakability', 'clarity']) {
     for (const value of [0, 3, 3.9, 4.5, 6, '4', null, undefined]) {
       const raw = review(); raw.selected[0][axis] = value;
       assert.throws(() => context.validateEditorialReview(raw, room, themes, 2), /品質基準/);
