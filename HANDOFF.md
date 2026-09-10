@@ -140,13 +140,27 @@ make gpu-check   # GPUが効いているか確認
 - 未解決のまま渡す問題は「持ち越し」に書く。
 
 ### 持ち越し(2026-09-10時点)
-- GitHubのデフォルトブランチをmainに切替+不要ブランチ削除(ユーザー作業、未確認)
+- GitHubのデフォルトブランチは2026-09-10に `gh repo view` で `main` と確認済み。不要ブランチ削除の要否は未確認・未実施。
 - YouTube投稿のend-to-end(承認→スロット→アップロード)は仕組み完成、実投稿での検証回数が少ない
 - Notion同期(`nightlyNotionSync`)はプロパティ設定に依存。トークテーマDB: data_source `40b07b00-9eac-4cfa-bd6f-e67805190198`
 - 見た目自己採点(visual_review)は導入直後。採点の厳しさ・コストは実運用で要調整
+- **優先: 修正の本番反映と確認。** `5197a46` の一括操作修正はローカルのみ。既存の `GAS_DEPLOYMENT_ID` に `make gas-deploy` で反映し、GAS実環境を確認する必要がある。このWindows作業コピーには `.env` / `gas/.clasp.json` がなく、Logシート・ダッシュボード・実投稿は未検証。
+- **次の改善候補: 投稿の重複防止。** `gas/src/Publish.js:listPublishQueue()` は取得時に確保しない。Actions内のconcurrencyはあるが、ローカル `make publish` と同時実行すると同じ動画を投稿し得る（コード上のリスク、事故発生は未確認）。投稿用claimと復旧手順を検討する。
+- **次の改善候補: 投稿成功と結果報告失敗の分離。** `pipeline/ytshorts/cli.py:cmd_publish()` はアップロードとGASへの成功報告を同じtryで処理するため、成功報告の通信失敗も投稿失敗として扱う。再投稿前にYouTube側の実体を照合する必要がある（コード上のリスク、事故発生は未確認）。
+
+### Codexの引き継ぎ確認(2026-09-10)
+- 起点: `main` の `52a8f3b`。作業ブランチ: `codex/handoff-dashboard-bulk-actions`。Windowsの `C:\Users\tasuk\Documents\ChatGPT\PR戦略_SNS運営\Youtube_Short_movies` に新規clone。既存のUbuntu運用機とは別環境。
+- 修正内容: 「承認待ちを全部却下」は `stock` のみ、「予約中を全部今すぐ投稿」は `approved` / `scheduled` のみを対象とする。個別操作・トークン認証・旧データのkind未設定対応を維持。
+- 再現と検証: 修正前はGAS回帰テスト14件中3件が対象範囲の誤りで失敗、修正後は14件すべて成功。Python既存132件は変更前後とも成功。`git diff --check` も成功。
+- 実行環境: Python 3.14.6 / Node.js 24.18.0。`pipeline/.venv` にテスト用のpytest/PyYAMLのみ導入（本番依存・GPU・動画レンダリング環境は未構築）。Ubuntu向け `make test` の代わりに、`pipeline` 内で `.venv/Scripts/python -m pytest tests/ -q` を実行。
+- GASテスト: ルートで `node --test gas/tests/dashboard.test.cjs`。シート・Slack・Actionsはスタブのため外部送信なし。`.github/workflows/test.yml` にPython 3.12 / Node.js 24のpush/PR時テストを追加したが、未pushのためGitHub上では未実行。
+- 運用確認: 読み取り時点の直近8件のGitHub Actionsはすべてsuccess。ただし最新HANDOFF追加前の `c009d6c` に対する実行で、実際に動画が投稿されたことやGAS本番コードとの一致を保証しない。
+- 本番操作: push・マージ・GASデプロイ・設定変更・Slack通知・YouTube投稿は行っていない。既存のURLとシークレットは変更していない。
 
 ### 引き継ぎログ
 - 2026-09-10 Claude: 本引き継ぎ資料を作成。ここまでの実装は`git log`参照。
+- 2026-09-10 Codex: ダッシュボードの一括却下/即時投稿を表示どおりの対象範囲に限定し、別タブの動画の誤操作を防止。回帰テスト14件、テストCI、実行手順を追加。コミット `5197a46`（ローカル、未push）。
+- 2026-09-10 Codex: 引き継ぎの確認結果・検証コマンド・未デプロイ状態・投稿処理の持ち越しを本ファイルに記録。対応コミットは `git log -1 --format=oneline -- HANDOFF.md` で確認可能。
 
 ---
 *質問があればユーザーに聞くより先に、コード・Logシート・このファイルを読むこと。それでも分からないことだけ聞く。健闘を祈る。 — Claude*
