@@ -47,7 +47,7 @@ for (const failureStage of [0, 1]) {
 
 test('discussion requires the three distinct known perspectives', () => {
   const { context } = sandbox();
-  for (const roles of [['rei', 'sebastian'], ['rei', 'rei', 'hannibal'], ['rei', 'sebastian', 'scipio'], ['rei', 'sebastian', 'unknown']]) {
+  for (const roles of [['rei', 'sebastian'], ['rei', 'rei', 'hannibal'], ['rei', 'sebastian', 'legacy_persona'], ['rei', 'sebastian', 'unknown']]) {
     const raw = discussion();
     raw.perspectives = roles.map(role => ({ role, objection: '異論', revision: '修正' }));
     assert.throws(() => context.validateEditorialDiscussion(raw, themes, 4), /視点/);
