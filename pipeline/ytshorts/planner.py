@@ -1,4 +1,4 @@
-"""planner.py — Claude による編集プラン生成と、その正規化（純粋ロジック）。
+"""planner.py — Astra/Claude によるテーマ・編集プラン生成と正規化。
 
 プランのスキーマ（時刻はすべて元動画の秒）:
 {
@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import json
 
-from .claude import ask_claude_json
+from . import llm, review
 from .config import Config
 from .transcribe import transcript_as_text
 
@@ -32,6 +32,10 @@ PLANNER_SYSTEM = """あなたはYouTubeショート専門の動画編集者で�
 バズるショート動画の編集プランをJSONで出力します。
 
 編集方針:
+- 素材の発話から各ショートの theme（主題）、target_viewer（想定視聴者）、
+  viewer_promise（見終わると何が分かるか）を決め、それに沿って切り口と構成を編集する
+- チャンネルの文脈に合っても、素材にない体験・数値・因果関係・最新ニュースを創作しない。
+  タイトルとフックの約束は必ず選んだ発話内で回収する。前後を切って発言の意味を変えない
 - 1つの質問への回答 = 1本のショート。話が良ければ1回答から複数本切り出してもよい
 - clip は話のまとまりで切る。冒頭は結論やフックになる一言から始まるように選ぶ
 - extra_cuts で言い直し・噛み・「えー」「あのー」などのフィラー・脱線を刻んでカットする
@@ -81,7 +85,8 @@ def build_planner_prompt(
         '"clip": {"start", "end"}, '
         '"extra_cuts": [{"start", "end", "reason"}], "captions": [{"start", "end", "text"}], '
         '"overlays": [{"time", "duration", "text"}], '
-        '"illustrations": [{"time", "duration", "prompt"}], "score", "score_reason"}]}'
+        '"illustrations": [{"time", "duration", "prompt"}], "score", "score_reason", '
+        '"theme", "target_viewer", "viewer_promise"}]}'
         "\nquestion_idx はこの話が台本のどの質問への回答かを示す番号。"
         "台本が無い・どの質問でもない場合は 0。"
     )
@@ -105,12 +110,19 @@ def generate_plan(
     script_questions: list[dict] | None = None,
     instructions: str = "",
     insights: str = "",
+    images: list | None = None,
 ) -> dict:
-    raw = ask_claude_json(
+    prompt = build_planner_prompt(transcript, cfg, script_questions, instructions, insights)
+    if images:
+        prompt += ("\n添付は元動画から時系列順に抽出した参考フレームです。"
+                   "映っている物や構図を切り口・挿絵の参考にしてください。"
+                   "静止画から発話時刻や出来事を推測せず、カットの時刻は文字起こしに従うこと。")
+    raw = llm.ask_json(
         build_planner_system(cfg),
-        build_planner_prompt(transcript, cfg, script_questions, instructions, insights),
+        prompt,
+        cfg,
         max_tokens=16000,
-        model=cfg.claude_model,
+        images=images,
     )
     return normalize_plan(raw, transcript["duration"])
 
@@ -120,7 +132,9 @@ def _clamp(v: float, lo: float, hi: float) -> float:
 
 
 def normalize_plan(plan: dict, duration: float) -> dict:
-    """Claudeの出力を検証・補正する。壊れたショートは捨てる。"""
+    """AIの出力を検証・補正する。壊れたショートは捨てる。"""
+    if not isinstance(plan, dict) or not isinstance(plan.get("shorts", []), list):
+        raise RuntimeError("編集プランはshorts配列を持つJSONオブジェクトが必要です")
     shorts = []
     for i, s in enumerate(plan.get("shorts") or []):
         try:
@@ -200,6 +214,9 @@ def normalize_plan(plan: dict, duration: float) -> dict:
             "illustrations": illustrations,
             "score": score,
             "score_reason": str(s.get("score_reason") or ""),
+            "theme": str(s.get("theme") or "").strip()[:120],
+            "target_viewer": str(s.get("target_viewer") or "").strip()[:200],
+            "viewer_promise": str(s.get("viewer_promise") or "").strip()[:200],
         })
     return {"shorts": shorts}
 
@@ -207,10 +224,23 @@ def normalize_plan(plan: dict, duration: float) -> dict:
 def load_or_generate_plan(
     transcript: dict, session_dir, cfg: Config, script_questions=None,
     instructions: str = "", insights: str = "",
+    source_video=None,
 ) -> dict:
     path = session_dir / "plan.json"
+    identity = llm.identity(cfg)
     if path.exists():
-        return json.loads(path.read_text(encoding="utf-8"))
-    plan = generate_plan(transcript, cfg, script_questions, instructions, insights)
+        cached = json.loads(path.read_text(encoding="utf-8"))
+        if cached.get("_ai") == identity or (
+            "_ai" not in cached and identity["provider"] == "anthropic"
+        ):
+            return cached
+    images = []
+    if source_video is not None and identity["provider"] == "openai":
+        for i, fraction in enumerate((0.1, 0.5, 0.9)):
+            frame = session_dir / f"source_frame_{i}.jpg"
+            if review.extract_frame(source_video, transcript["duration"] * fraction, frame, width=640):
+                images.append(frame)
+    plan = generate_plan(transcript, cfg, script_questions, instructions, insights, images=images)
+    plan["_ai"] = identity
     path.write_text(json.dumps(plan, ensure_ascii=False, indent=1), encoding="utf-8")
     return plan

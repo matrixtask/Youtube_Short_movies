@@ -1,13 +1,13 @@
 """review.py — レンダリング済みショートの見た目の自己採点と作り直し判断。
 
-レンダリング後にフレームを抜き、Claude(vision)に「テロップ」「挿絵」を
+レンダリング後にフレームを抜き、Astra/Claude(vision)に「テロップ」「挿絵」を
 採点させる。合格点未満なら:
   - テロップ → 文字サイズ・位置の調整アクションをスタイルに適用して再レンダリング
   - 挿絵     → 批評つきでSVGを再生成 or 縮小して再レンダリング
 サムネイルは複数フレーム候補を採点させ、最高点のフレームを採用する。
 
 判断ロジック（時刻選定・アクション適用・結果の正規化）は純粋関数にして
-テストし、ffmpeg・Claude呼び出しだけを副作用にしている。
+テストし、ffmpeg・AI呼び出しだけを副作用にしている。
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from .claude import ask_claude_json
+from .llm import ask_json
 from .config import Config
 
 TELOP_ACTIONS = ("keep", "font_smaller", "font_bigger", "move_up", "move_down")
@@ -123,7 +123,7 @@ def review_passed(review: dict, threshold: int) -> bool:
     return ill is None or ill >= threshold
 
 
-# ---- 副作用（ffmpeg / Claude） ---------------------------------------------
+# ---- 副作用（ffmpeg / AI） -------------------------------------------------
 
 def extract_frame(video: Path, t: float, out_path: Path, width: int = 480) -> bool:
     proc = subprocess.run(
@@ -145,8 +145,8 @@ def review_short(rendered: Path, out_dur: float, ill_files: list[tuple],
     if not frames:
         return None
     try:
-        raw = ask_claude_json(REVIEW_SYSTEM, "このショートを採点してください。",
-                              max_tokens=1000, model=cfg.claude_model, images=frames)
+        raw = ask_json(REVIEW_SYSTEM, "このショートを採点してください。", cfg,
+                       max_tokens=1000, images=frames)
         return normalize_review(raw)
     except RuntimeError:
         return None
@@ -164,9 +164,9 @@ def best_thumbnail_time(rendered: Path, out_dur: float, work_dir: Path, cfg: Con
         if not cands:
             break
         try:
-            raw = ask_claude_json(
-                THUMB_SYSTEM, f"候補は{len(cands)}枚です。", max_tokens=300,
-                model=cfg.claude_model, images=[f for _, f in cands])
+            raw = ask_json(
+                THUMB_SYSTEM, f"候補は{len(cands)}枚です。", cfg, max_tokens=300,
+                images=[f for _, f in cands])
             scores = [(_clamp_score(s) or 0) for s in (raw.get("scores") or [])]
         except RuntimeError:
             return best_t if best_score >= 0 else 1.0

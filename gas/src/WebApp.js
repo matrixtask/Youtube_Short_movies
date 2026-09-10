@@ -33,6 +33,10 @@ function doGet(e) {
       })).setMimeType(ContentService.MimeType.JSON);
     }
     var exportable = [
+      'OPENAI_API_KEY',
+      'LLM_PROVIDER',
+      'OPENAI_MODEL',
+      'OPENAI_REASONING_EFFORT',
       'ANTHROPIC_API_KEY',
       'SLACK_BOT_TOKEN',
       'YT_CLIENT_ID',

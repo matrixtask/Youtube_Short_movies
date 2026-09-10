@@ -3,11 +3,11 @@
 撮りっぱなしの動画を入れると、ここまで全部自動でやります:
 
 1. **文字起こし** — faster-whisper（単語タイムスタンプ付き）
-2. **編集プラン** — Claudeが「どこを切り出すか / どこをカットするか / 字幕 /
+2. **編集プラン** — Astra/Claudeが「テーマ / どこを切り出すか / どこをカットするか / 字幕 /
    ツッコミ / 挿絵」をJSONで決める。ショートごとに0-100点で採点し、
    閾値未満はレンダリングしない（品質ゲート）
 3. **変な間のカット** — 沈黙・言い直し・フィラーを刻んでテンポを作る
-4. **挿絵** — Claudeが描くSVGイラストをPNG化して画面に重ねる
+4. **挿絵** — Astra/Claudeが描くSVGイラストをPNG化して画面に重ねる
 5. **レンダリング** — ffmpegで9:16・字幕焼き込みのショートを量産
 6. **まとめ動画** — 溜まったショートをぼかし背景の16:9に繋いで1本に
 
@@ -15,11 +15,12 @@
 
 このリポジトリのGitHub Actions（`.github/workflows/`）がパイプラインを
 クラウドで実行します。やることはリポジトリの
-Settings > Secrets and variables > Actions に4つのSecretsを入れるだけ:
+Settings > Secrets and variables > Actions に用途に応じたSecretsを登録します:
 
 | Secret | 内容 |
 |---|---|
-| `ANTHROPIC_API_KEY` | Claude APIキー |
+| `OPENAI_API_KEY` | Astra APIキー（登録すると既定でAstraを使用） |
+| `ANTHROPIC_API_KEY` | 従来Claude運用時のみ |
 | `GAS_WEBAPP_URL` | GASのWebアプリURL |
 | `GAS_ADMIN_TOKEN` | GASの `ADMIN_TOKEN` と同じ値 |
 | `SLACK_BOT_TOKEN` | Slackボットトークン（chat:write / channels:history / files:read / files:write） |
@@ -58,12 +59,13 @@ Settings > Secrets and variables > Actions に4つのSecretsを入れるだけ:
 
 ## ローカル実行（クラウドを使わない場合）
 
-必要なもの: Python 3.10+ / ffmpeg / 日本語フォント（例: Noto Sans CJK）/ Claude APIキー
+必要なもの: Python 3.10+ / ffmpeg / 日本語フォント（例: Noto Sans CJK）/ OpenAIまたはClaude APIキー
+切り替え・疎通確認は [ASTRA_SETUP.md](../ASTRA_SETUP.md) を参照。
 
 ```bash
 cd pipeline
 pip install -e .          # ytshorts コマンドが入る
-export ANTHROPIC_API_KEY=sk-ant-...
+export OPENAI_API_KEY=... # または従来のANTHROPIC_API_KEY
 ytshorts init             # workspace/ と config.yaml を作る
 ```
 

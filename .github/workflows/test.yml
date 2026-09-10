@@ -26,4 +26,4 @@ jobs:
         working-directory: pipeline
         run: python -m pytest tests/ -q
       - name: Test GAS dashboard actions
-        run: node --test gas/tests/dashboard.test.cjs
+        run: node --test gas/tests/*.test.cjs

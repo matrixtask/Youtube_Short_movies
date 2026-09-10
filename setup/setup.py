@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import json
+import getpass
 import re
 import secrets
 import shutil
@@ -190,6 +191,7 @@ def main() -> int:
     print("（どの項目も空Enterでスキップできます。何度でも再実行OK）")
 
     step("1/6 キー類の収集")
+    openai_key = getpass.getpass("  Astra APIキー (OPENAI_API_KEY、空Enterでスキップ): ").strip()
     anthropic_key = ask("Claude APIキー (ANTHROPIC_API_KEY)")
     repo = ask("GitHubリポジトリ (owner/repo)", detect_repo())
     github_pat = ask("GitHub PAT（動画到着で即クラウド起動する用。Contents: Read/write）")
@@ -227,6 +229,7 @@ def main() -> int:
 
     step("5/6 GASのプロパティ設定ファイル生成")
     props = {
+        "OPENAI_API_KEY": openai_key,
         "ANTHROPIC_API_KEY": anthropic_key,
         "SLACK_BOT_TOKEN": slack_token,
         "SLACK_CHANNEL_ID": slack_channel,
@@ -243,6 +246,7 @@ def main() -> int:
 
     step("6/6 GitHub Actions の Secrets 登録")
     secrets_map = {
+        "OPENAI_API_KEY": openai_key,
         "ANTHROPIC_API_KEY": anthropic_key,
         "GAS_WEBAPP_URL": webapp_url,
         "GAS_ADMIN_TOKEN": admin_token,

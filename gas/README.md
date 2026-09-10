@@ -11,9 +11,9 @@ GAS + スプレッドシート + Slack の構成で、サーバー運用は不�
 
 ### ローカルの回帰テスト
 
-リポジトリルートで `node --test gas/tests/dashboard.test.cjs` を実行します
+リポジトリルートで `node --test gas/tests/*.test.cjs` を実行します
 （Node.js 24、追加のnpm依存なし）。GASのシート操作・通知・Actions起動を
-スタブ化し、一括操作の対象範囲、個別操作、認証拒否を検証します。
+スタブ化し、一括操作の対象範囲、個別操作、認証拒否、AI切り替え・テーマ選定を検証します。
 実際のSlack通知やYouTube投稿は行いません。
 `.github/workflows/test.yml` でPythonの既存テストと合わせてpush/PR時に実行します。
 GAS実環境の表示・通信とYouTube投稿のend-to-end検証は別途必要です。
@@ -33,7 +33,8 @@ GASエディタ > プロジェクトの設定 > スクリプト プロパティ�
 | キー | 内容 |
 |---|---|
 | `SPREADSHEET_ID` | 既存シートを使う場合のみ（未設定なら自動作成） |
-| `ANTHROPIC_API_KEY` | Claude APIキー |
+| `OPENAI_API_KEY` | Astra APIキー（登録すると既定でAstraを使用） |
+| `ANTHROPIC_API_KEY` | 従来Claude運用時のみ |
 | `SLACK_BOT_TOKEN` | Slackボットトークン (`xoxb-...`) |
 | `SLACK_CHANNEL_ID` | 台本を届けるチャンネルID |
 | `ADMIN_TOKEN` | ローカルパイプライン連携用の長いランダム文字列 |
@@ -48,6 +49,7 @@ GASエディタ > プロジェクトの設定 > スクリプト プロパティ�
 | `YOUTUBE_PRIVACY` | `public` / `unlisted` / `private`（任意、既定public） |
 
 SlackアプリはX_Autopostと同じものを使い回せます（別チャンネルにするだけ）。
+AIの選択ルールと任意設定は [ASTRA_SETUP.md](../ASTRA_SETUP.md) を参照。
 Bot Token Scopes は `chat:write` / `channels:history`（イベント購読に必須）に
 加えて **`files:read`**（動画のダウンロード）と
 **`files:write`**（生成したショートをスレッドに返すのに必要）。
@@ -105,7 +107,8 @@ manifest」に貼れば、スコープ・イベント購読込みで一発で作
 2. ローカルで `make env-pull`（WebアプリURLとADMIN_TOKENを聞かれる）→ `.env` が埋まる
 3. **`ALLOW_ENV_EXPORT` を false にするか削除する**
 
-返るのは許可リストのプロパティ（`ANTHROPIC_API_KEY` / `SLACK_BOT_TOKEN` /
+返るのは許可リストのプロパティ（`OPENAI_API_KEY` / `ANTHROPIC_API_KEY` /
+`LLM_PROVIDER` / `OPENAI_MODEL` / `OPENAI_REASONING_EFFORT` / `SLACK_BOT_TOKEN` /
 `YT_*`）だけです。有効にしている間はADMIN_TOKENを知る人がこれらを取得
 できるため、使い終わったら必ず戻してください。
 

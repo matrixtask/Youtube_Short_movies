@@ -27,7 +27,10 @@ TEMPLATE_PATH = ROOT / ".env.example"
 SECRETS_PATH = ROOT / "setup" / "github-secrets.local.txt"
 
 # ウィザードの出力（GitHub Secrets名）→ .env のキー名
-ALIASES = {"GAS_WEBAPP_URL": "YTSHORTS_GAS_WEBAPP_URL"}
+ALIASES = {"GAS_WEBAPP_URL": "YTSHORTS_GAS_WEBAPP_URL",
+           "LLM_PROVIDER": "YTSHORTS_LLM_PROVIDER",
+           "OPENAI_MODEL": "YTSHORTS_OPENAI_MODEL",
+           "OPENAI_REASONING_EFFORT": "YTSHORTS_OPENAI_REASONING_EFFORT"}
 
 
 def parse_env_file(path: Path) -> dict:
@@ -87,7 +90,7 @@ def fetch_from_gas(url: str, token: str) -> dict:
         return {}
     got = data.get("env") or {}
     print(f"  GASから {len(got)}件 取得")
-    return got
+    return {ALIASES.get(key, key): value for key, value in got.items()}
 
 
 def write_env(env: dict) -> None:
@@ -119,7 +122,13 @@ def validate(env: dict) -> list[str]:
         elif len(url) < 80:
             problems.append(f"URLが短すぎます（{len(url)}文字）。途中で切れている可能性があります")
 
-    for key in ("ANTHROPIC_API_KEY", "SLACK_BOT_TOKEN", "GAS_ADMIN_TOKEN"):
+    provider = env.get("YTSHORTS_LLM_PROVIDER", "auto").strip().lower()
+    if provider == "auto":
+        provider = "openai" if env.get("OPENAI_API_KEY", "").strip() else "anthropic"
+    if provider not in ("openai", "anthropic"):
+        problems.append("YTSHORTS_LLM_PROVIDER が不正です")
+    api_key = "OPENAI_API_KEY" if provider == "openai" else "ANTHROPIC_API_KEY"
+    for key in (api_key, "SLACK_BOT_TOKEN", "GAS_ADMIN_TOKEN"):
         if not env.get(key):
             problems.append(f"{key} が空です")
 

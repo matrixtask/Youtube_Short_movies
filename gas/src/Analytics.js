@@ -4,7 +4,7 @@
  * 1. syncYoutubeStats(): 投稿済みショートの再生数・高評価をYouTube APIから
  *    取得してShortsシートに保存する（views / likes / stats_at 列）
  * 2. runSelfReview(): 実績（再生数・スコア・却下・飛ばされた質問・メモ）を
- *    Claudeに渡し、「質問・ネタ・構成をどう直すか」を言語化させる。
+ *    Astra/Claudeに渡し、「質問・ネタ・構成をどう直すか」を言語化させる。
  *    結果は Insights シートに履歴として残り、
  *    スクリプトプロパティ SCRIPT_INSIGHTS が最新の修正方針として
  *      - 台本の質問生成（generateShootQuestions）
@@ -172,7 +172,7 @@ function runSelfReview() {
     previous || '(初回)',
   ].join('\n');
 
-  var result = askClaudeJson(system, user, 2500);
+  var result = askAIJson(system, user, 2500);
   var analysis = (result.analysis || []).map(String).slice(0, 5);
   var fixes = (result.fixes || []).slice(0, 6);
 

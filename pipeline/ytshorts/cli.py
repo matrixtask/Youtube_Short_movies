@@ -20,7 +20,7 @@ from pathlib import Path
 
 from dataclasses import replace
 
-from . import compilation, cuts, gasapi, illustrations, planner, pull, render, review, slackup, subtitles, youtube
+from . import compilation, cuts, gasapi, illustrations, llm, planner, pull, render, review, slackup, subtitles, youtube
 from .config import CONFIG_FILENAME, Config, load_config
 from .transcribe import all_words, load_or_transcribe, probe_dimensions
 
@@ -85,12 +85,12 @@ def process_video(
     words = all_words(transcript)
     print(f"      {transcript['duration']:.0f}秒 / {len(words)}語")
 
-    print("[2/4] Claudeが編集プランを作成中…")
+    print("[2/4] AIがテーマ・編集プランを作成中…")
     if instructions.strip():
         print(f"      編集指示: {instructions.strip()[:80]}")
     questions = script.get("questions") if script else None
     plan = planner.load_or_generate_plan(transcript, session_dir, cfg, questions,
-                                         instructions, insights)
+                                         instructions, insights, source_video=video)
     shorts = plan["shorts"]
     print(f"      {len(shorts)}本のショート候補（品質ゲート: {cfg.quality_threshold}点）")
 
@@ -500,6 +500,22 @@ def cmd_publish(args: argparse.Namespace) -> int:
     return 1 if failed else 0
 
 
+def cmd_ai_check(args: argparse.Namespace) -> int:
+    """キー登録後のAPI疎通確認。動画キューやSlack・YouTubeには触れない。"""
+    cfg = load_config(args.config)
+    try:
+        selected = llm.identity(cfg)
+        print(f"AI: {selected['provider']} / {selected['model']}")
+        result = llm.ask_json("You are a connection checker.", 'Return {"ok":true}.', cfg, max_tokens=200)
+        if not isinstance(result, dict) or result.get("ok") is not True:
+            raise RuntimeError("AI疎通確認の応答が不正です")
+    except RuntimeError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    print("AI接続OK（動画処理・外部投稿は未実行）")
+    return 0
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     cfg = load_config(args.config)
     index = load_index(cfg)
@@ -519,6 +535,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("init", help="ワークスペースと設定ファイルを作る").set_defaults(func=cmd_init)
+    sub.add_parser("ai-check", help="AI接続確認（短いAPI呼出し。動画処理・投稿なし）").set_defaults(func=cmd_ai_check)
 
     p_pull = sub.add_parser("pull", help="Slackに投げた動画を取り込んで自動処理する")
     p_pull.add_argument("--watch", action="store_true", help="常駐して新着を監視し続ける")

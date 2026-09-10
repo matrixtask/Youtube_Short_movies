@@ -1,5 +1,5 @@
 # ytshorts の設定。`ytshorts init` でこのファイルが config.yaml にコピーされる。
-# APIキーは環境変数で渡す: ANTHROPIC_API_KEY / GAS_ADMIN_TOKEN
+# APIキーは環境変数で渡す: OPENAI_API_KEY（またはANTHROPIC_API_KEY）/ GAS_ADMIN_TOKEN
 
 # 作業ディレクトリ（inbox / sessions / shorts / compilations が作られる）
 workspace: workspace
@@ -11,6 +11,9 @@ language: ja
 
 # 編集
 claude_model: claude-sonnet-5
+llm_provider: auto  # OpenAIキー登録時はAstra。openai / anthropic で固定も可
+openai_model: gpt-6-astra
+openai_reasoning_effort: medium
 max_pause: 0.5            # これを超える沈黙（秒）はカット
 pad: 0.15                 # 発話の前後に残す秒数
 short_min_sec: 15

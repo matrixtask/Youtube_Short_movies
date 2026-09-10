@@ -3,7 +3,7 @@
  *
  * 流れ:
  *   1. 朝のトリガーで startDailyShootScript() が実行される
- *   2. テーマ選定 → Claudeが「カメラに向かって答える用」の質問+ネタ指示を生成
+ *   2. テーマ選定 → Astra/Claudeが「カメラに向かって答える用」の質問+ネタ指示を生成
  *   3. Slackに台本が届く → スマホで質問に答える動画を撮る（通しでOK）
  *   4. 撮った動画をそのままスレッドに投稿 → Videos.js が編集キューに登録
  *   5. ローカル常駐の `ytshorts pull --watch` が自動でDL・編集 → 結果がスレッドに返る
@@ -125,7 +125,7 @@ function generateShootQuestions(themes, count, recentNotes) {
     '合計' + count + '問。各テーマから最低1問。',
     'JSON配列で出力: [{"theme": "...", "category": "evergreen|news|neta", "question": "...", "hint": "...", "neta": "..."}]',
   ].join('\n');
-  var questions = askClaudeJson(system, user, 2500);
+  var questions = askAIJson(system, user, 2500);
   if (!Array.isArray(questions) || !questions.length) throw new Error('質問生成に失敗しました');
   return questions.slice(0, count);
 }

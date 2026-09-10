@@ -1,18 +1,20 @@
-"""illustrations.py — Claude に SVG の挿絵を描かせて PNG 化する。
+"""illustrations.py — Astra/Claude に SVG の挿絵を描かせて PNG 化する。
 
-画像生成APIに依存せず、Claude が出力するフラットなベクターイラストを使う。
+画像生成APIに依存せず、AI が出力するフラットなベクターイラストを使う。
 PNG化は cairosvg → rsvg-convert → inkscape の順で試し、どれも無ければ
 その挿絵はスキップされる（動画は挿絵なしで完成する）。
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import shutil
 import subprocess
 from pathlib import Path
 
-from .claude import ask_claude
+from .llm import ask_text, identity
 from .config import Config
 
 SVG_SYSTEM = """あなたはYouTubeショート向けの挿絵を描くイラストレーターです。
@@ -67,10 +69,17 @@ def generate_illustrations(short: dict, out_dir: Path, cfg: Config,
     for i, ill in enumerate(short.get("illustrations") or []):
         png = out_dir / f"{short['id']}_ill{i}.png"
         svg_path = out_dir / f"{short['id']}_ill{i}.svg"
+        cache_key_path = out_dir / f"{short['id']}_ill{i}.cache-key"
+        cache_key = hashlib.sha256(json.dumps(
+            {"ai": identity(cfg), "prompt": ill["prompt"]}, sort_keys=True,
+        ).encode("utf-8")).hexdigest()
         if critique:
             png.unlink(missing_ok=True)
             svg_path.unlink(missing_ok=True)
-        if png.exists():
+        legacy_cache = not cache_key_path.exists() and identity(cfg)["provider"] == "anthropic"
+        if png.exists() and (legacy_cache or (
+            cache_key_path.exists() and cache_key_path.read_text() == cache_key
+        )):
             results.append(png)
             continue
         prompt = "場面: " + ill["prompt"]
@@ -78,7 +87,7 @@ def generate_illustrations(short: dict, out_dir: Path, cfg: Config,
             prompt += ("\n\n前回の絵は品質チェックで不合格でした。指摘: " + critique +
                        "\n指摘を避けて、よりシンプルで崩れない絵にしてください。")
         try:
-            text = ask_claude(SVG_SYSTEM, prompt, max_tokens=4000, model=cfg.claude_model)
+            text = ask_text(SVG_SYSTEM, prompt, cfg, max_tokens=4000)
             svg = extract_svg(text)
         except RuntimeError:
             svg = None
@@ -86,5 +95,9 @@ def generate_illustrations(short: dict, out_dir: Path, cfg: Config,
             results.append(None)
             continue
         svg_path.write_text(svg, encoding="utf-8")
-        results.append(png if svg_to_png(svg_path, png) else None)
+        if svg_to_png(svg_path, png):
+            cache_key_path.write_text(cache_key, encoding="ascii")
+            results.append(png)
+        else:
+            results.append(None)
     return results

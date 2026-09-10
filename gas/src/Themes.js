@@ -5,6 +5,8 @@
  *   evergreen … 定番（仕事観・事業の学び・失敗談など）
  *   news      … 時事ネタ
  *   neta      … ネタ（ゆるい話・あるある・自虐など）
+ * OpenAI選択時はAstraが実績と本人メモから候補テーマ・切り口を選定する。
+ * 休止中テーマは候補から除外し、選定理由はLogに記録する。
  */
 
 var DEFAULT_THEMES = [
@@ -99,10 +101,14 @@ function pickThemesForShoot() {
   }
 
   var picked = [];
-  var evergreen = pickFrom(['evergreen']);
-  if (evergreen) picked.push(evergreen);
-  var second = pickFrom(['news', 'neta'], picked.map(function (t) { return t.theme; }));
-  if (second) picked.push(second);
+  if (aiProvider() === 'openai') {
+    picked = selectThemesWithAI(all.filter(function (t) { return effectiveWeight(t) > 0; }));
+  } else {
+    var evergreen = pickFrom(['evergreen']);
+    if (evergreen) picked.push(evergreen);
+    var second = pickFrom(['news', 'neta'], picked.map(function (t) { return t.theme; }));
+    if (second) picked.push(second);
+  }
 
   picked.forEach(function (t) {
     updateRowsWhere(SHEET.THEMES, 'theme', t.theme, { last_used: fmtDate(now) });
@@ -110,6 +116,50 @@ function pickThemesForShoot() {
   return picked.map(function (t) {
     return { theme: String(t.theme), category: String(t.category), notes: String(t.notes || '') };
   });
+}
+
+/** 候補名は変更しない。テーマDBとの実績対応を維持して切り口だけ具体化する。 */
+function selectThemesWithAI(candidates) {
+  var groups = [['evergreen'], ['news', 'neta']].map(function (categories) {
+    return candidates.filter(function (t) { return categories.indexOf(String(t.category)) >= 0; });
+  }).filter(function (pool) { return pool.length > 0; });
+  if (!groups.length) throw new Error('選定可能なテーマがありません（weight/categoryを確認）');
+  var input = {
+    channel: getProp('CHANNEL_CONCEPT', '中井佑の、とにかく早く移動したい！'),
+    today: fmtDate(nowJst()),
+    notes: collectRecentNotes(5),
+    theme_insights: getProp('THEME_INSIGHTS', ''),
+    script_insights: getProp('SCRIPT_INSIGHTS', ''),
+    groups: groups.map(function (pool) {
+      return pool.map(function (t) {
+        return { theme: String(t.theme), category: String(t.category), notes: String(t.notes || ''),
+          weight: Number(t.weight) || 1, hits: Number(t.hits) || 0, misses: Number(t.misses) || 0,
+          last_used: String(t.last_used || '') };
+      });
+    }),
+  };
+  var result = askAIJson([
+    'あなたはYouTubeショートの企画編集者です。入力の各groupから必ず1テーマを選びます。',
+    'チャンネルとの一致、具体的な体験を話せるか、視聴者への価値、直近テーマとの重複を比較してください。',
+    'hits/missesは撮影・編集実績であり再生数ではありません。少数の実績を過大評価しないこと。',
+    'ニュースの事実・数値・本人の体験は捏造せず、未確認なら本人に確認する聞き方にしてください。',
+    'themeは候補と完全一致。angleには撮影で答えやすい具体的な切り口を1文、reasonには選定理由を1文。',
+    'JSON: {"themes":[{"theme":"候補名","angle":"切り口","reason":"選定理由"}]}。groupの順で出力。',
+  ].join('\n'), JSON.stringify(input), 2500);
+  if (!result || !Array.isArray(result.themes) || result.themes.length !== groups.length) {
+    throw new Error('AIテーマ選定の件数が不正です');
+  }
+  // 全件を検証してからログ・last_usedに反映する。
+  var selected = result.themes.map(function (choice, i) {
+    var row = choice && groups[i].filter(function (t) { return String(t.theme) === choice.theme; })[0];
+    if (!row || typeof choice.angle !== 'string' || !choice.angle.trim() ||
+        typeof choice.reason !== 'string' || !choice.reason.trim()) throw new Error('AIテーマ選定が候補と一致しません');
+    return { theme: String(row.theme), category: String(row.category),
+      notes: String(row.notes || '') + '\n今回の切り口: ' + choice.angle.trim().slice(0, 200),
+      reason: choice.reason.trim().slice(0, 200) };
+  });
+  logEvent('theme_ai_selection', JSON.stringify(selected));
+  return selected;
 }
 
 function labelForCategory(cat) {
@@ -212,7 +262,7 @@ function tuneThemeWeights() {
  * 未検証のテーマに事前適用する（テーマ自己調整の汎化ステップ）。
  *
  * 例:「具体的な体験を聞かれると喋れるが、抽象論・数字の暗記が要る話は
- * 飛ばしがち」といった傾向をClaudeに言語化させ、
+ * 飛ばしがち」といった傾向をAstra/Claudeに言語化させ、
  *   1. まだ実績のないテーマの重みを傾向に基づいて先回りで調整
  *   2. 傾向をスクリプトプロパティ THEME_INSIGHTS に蓄積し、
  *      以後の台本生成で「喋りやすい聞き方」への言い換えに使う
@@ -259,7 +309,7 @@ function analyzeThemeDifferences(stats) {
     '未検証テーマだけに出す。確信が持てないものは含めない。',
   ].join('\n');
 
-  var result = askClaudeJson(system, user, 3000);
+  var result = askAIJson(system, user, 3000);
   if (!result || !Array.isArray(result.insights)) return null;
 
   // 1. 未検証テーマへ事前適用（±1に制限、0〜3にクランプ）

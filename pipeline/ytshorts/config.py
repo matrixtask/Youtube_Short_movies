@@ -19,6 +19,9 @@ class Config:
     whisper_device: str = "auto"
     language: str = "ja"
     # 編集
+    llm_provider: str = "auto"  # OPENAI_API_KEY登録時はOpenAI、それ以外は既存Claude
+    openai_model: str = "gpt-6-astra"
+    openai_reasoning_effort: str = "medium"
     claude_model: str = "claude-sonnet-5"
     max_pause: float = 0.5  # これを超える沈黙はカット
     pad: float = 0.15  # 発話の前後に残す秒数
@@ -99,4 +102,8 @@ def load_config(path: str | Path | None = None) -> Config:
         cfg.gas_webapp_url = os.environ["YTSHORTS_GAS_WEBAPP_URL"]
     if os.environ.get("YTSHORTS_WHISPER_MODEL"):
         cfg.whisper_model = os.environ["YTSHORTS_WHISPER_MODEL"]
+    for key in ("llm_provider", "openai_model", "openai_reasoning_effort"):
+        value = os.environ.get("YTSHORTS_" + key.upper())
+        if value:
+            setattr(cfg, key, value)
     return cfg

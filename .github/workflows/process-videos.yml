@@ -2,7 +2,7 @@
 # 起動: GASからの repository_dispatch（動画が届いた瞬間）+ 毎時の保険 + 手動。
 #
 # 必要な Secrets（リポジトリの Settings > Secrets and variables > Actions）:
-#   ANTHROPIC_API_KEY  Claude APIキー
+#   OPENAI_API_KEY     Astra APIキー（未設定なら従来のANTHROPIC_API_KEY）
 #   GAS_WEBAPP_URL     GASのWebアプリURL
 #   GAS_ADMIN_TOKEN    GASのADMIN_TOKENと同じ値
 #   SLACK_BOT_TOKEN    Slackボットトークン（files:read / files:write / chat:write）
@@ -52,6 +52,10 @@ jobs:
         working-directory: pipeline
         run: ytshorts pull
         env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          YTSHORTS_LLM_PROVIDER: ${{ vars.YTSHORTS_LLM_PROVIDER }}
+          YTSHORTS_OPENAI_MODEL: ${{ vars.YTSHORTS_OPENAI_MODEL }}
+          YTSHORTS_OPENAI_REASONING_EFFORT: ${{ vars.YTSHORTS_OPENAI_REASONING_EFFORT }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           YTSHORTS_GAS_WEBAPP_URL: ${{ secrets.GAS_WEBAPP_URL }}
           GAS_ADMIN_TOKEN: ${{ secrets.GAS_ADMIN_TOKEN }}

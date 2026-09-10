@@ -3,12 +3,15 @@
  *
  * 必須プロパティ（GASエディタ > プロジェクトの設定 > スクリプト プロパティ）:
  *   SPREADSHEET_ID      データ管理用スプレッドシートのID
- *   ANTHROPIC_API_KEY   Claude APIキー
+ *   OPENAI_API_KEY     Astra APIキー（従来Claude運用ではANTHROPIC_API_KEY）
  *   SLACK_BOT_TOKEN     Slackボットトークン (xoxb-...)
  *   SLACK_CHANNEL_ID    撮影台本・通知先チャンネルID
  *   ADMIN_TOKEN         ローカル編集パイプライン連携用の長いランダム文字列
  *
  * 任意:
+ *   LLM_PROVIDER        auto（OpenAIキー登録時はAstra）| openai | anthropic
+ *   OPENAI_MODEL        既定: gpt-6-astra
+ *   OPENAI_REASONING_EFFORT  既定: medium（low/medium/high/xhigh/max）
  *   CHANNEL_CONCEPT     チャンネルコンセプト（台本生成の文脈に使う）
  *   CLAUDE_MODEL        既定: claude-sonnet-5
  *   SHOOT_QUESTIONS     1回の台本の質問数（既定: 5）
