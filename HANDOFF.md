@@ -179,6 +179,12 @@ make gpu-check   # GPUが効いているか確認
 - 検証: `node --test gas/tests/*.test.cjs` 33件、pipeline内の `.venv/Scripts/python -m pytest tests/ -q` 153件成功。`git diff --check` 成功。Slack・シート・APIはスタブ。実際の生成品質、意味上の重複、事実性、GAS実行時間内の完了、再生数の改善は未検証。新しい本番依存・シート列・シークレット変更なし。
 - 反映状況: ユーザーは運用機で `git pull && make gas-deploy` 実施済みと報告。ただし確認時のGitHub mainは `52a8f3b8266388cd070641a00d639a573202abe9` のままで、本ローカルブランチの変更は含まれない。運用機のブランチ・コミット・GAS本番コードは未確認。改善コードをマージ/pushした後に、運用機で取り込みと既存デプロイの更新が必要。このWindows作業コピーではpush・マージ・デプロイ・Slack送信をしていない。
 
+### マージ・pushの引き継ぎ(2026-09-11)
+- ユーザーの「マージとプッシュして」により、`main` と `claude/youtube-short-auto-pipeline-d1z54a` の両方へ反映する。対象は `8cdc79c` までの一括操作修正・Astra対応・台本改善と本記録。下記の2026-09-10ログにある「未push」は当時の状態。
+- fetch後、両リモートブランチが `52a8f3b` で、改善ブランチの祖先であることを確認。既存コミットを維持するfast-forwardで統合し、両参照をatomic pushする。完了は `git ls-remote origin refs/heads/main refs/heads/claude/youtube-short-auto-pipeline-d1z54a` とGitHub Actionsで確認する。
+- マージ前の再検証: Python 153件・GAS 33件成功、`git diff --check origin/main HEAD` 成功。新しい機能変更は加えていない。
+- GAS本番デプロイは別作業。push後、運用機で `cd ~/Youtube_Short_movies && git pull --ff-only && make gas-deploy` を実行する。以前のデプロイには今回の改善コードが含まれていない。実API品質・GAS応答時間・実素材の確認は引き続き必要。
+
 ### 引き継ぎログ
 - 2026-09-10 Claude: 本引き継ぎ資料を作成。ここまでの実装は`git log`参照。
 - 2026-09-10 Codex: ダッシュボードの一括却下/即時投稿を表示どおりの対象範囲に限定し、別タブの動画の誤操作を防止。回帰テスト14件、テストCI、実行手順を追加。コミット `5197a46`（ローカル、未push）。
@@ -186,6 +192,7 @@ make gpu-check   # GPUが効いているか確認
 - 2026-09-10 Codex: ユーザーのAstra移行依頼に対応。OPENAI_API_KEYで撮影テーマ選定・素材の編集プラン・SVG挿絵・見た目評価・自己分析を実行可能にし、旧Claudeとの切替、キャッシュ、登録経路、疎通確認CLI、回帰テストと導入資料を整備。コミット `e37e7a2`（ローカル、未push）。
 - 2026-09-10 Codex: Astra対応の検証結果・実機未確認事項・反映手順を本ファイルに追記。対応コミットは `git log -1 --format=oneline -- HANDOFF.md` で確認可能。
 - 2026-09-10 Codex: 台本をHow to Speakに沿う構成ガイドへ拡張し、最近の質問との重複・構造を検証。撮影から編集へhintを渡し、仕様・例・実機未確認事項を記録。対応コミットは `git log -1 --format=oneline -- gas/src/ScriptQuality.js` で確認可能（ローカル、未push）。
+- 2026-09-11 Codex: ユーザーの依頼に従いmainと既存作業ブランチへの統合対象・再検証結果・デプロイ手順を記録。対象コードは `5197a46` / `e37e7a2` / `8cdc79c`、本記録のコミットは `git log -1 --format=oneline -- HANDOFF.md` で確認可能。
 
 ---
 *質問があればユーザーに聞くより先に、コード・Logシート・このファイルを読むこと。それでも分からないことだけ聞く。健闘を祈る。 — Claude*
