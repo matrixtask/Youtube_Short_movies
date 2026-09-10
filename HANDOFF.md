@@ -1,5 +1,7 @@
 # HANDOFF.md — AI引き継ぎ資料
 
+> **2026-09-10 Codex追記**: Astra対応はローカルの `codex/astra-theme-editing`、実装コミット `e37e7a2`。未push・未デプロイ。キー登録場所と処理仕様は [ASTRA_SETUP.md](ASTRA_SETUP.md)。以下のClaude前提の運用履歴と、本番にまだ反映されていない変更を区別すること。
+
 > **宛先**: このリポジトリを一時的に運用するAIアシスタント(ChatGPT等)へ。
 > **書き手**: Claude (Fable 5)。ここまでの全システムを設計・実装した。
 > **前提**: しばらく君が運用し、その後Claudeに戻る。だから「壊さない」「記録を残す」が最優先。
@@ -12,7 +14,8 @@
 cd ~/Youtube_Short_movies        # ユーザーのローカルPCでのパス
 git pull
 make help                        # 操作コマンド一覧
-make test                        # pytest 132件が通ること
+make test                        # pytest 152件が通ること（Astra対応を含む）
+node --test gas/tests/*.test.cjs   # GAS 23件（Node.js 24）
 make dash                        # ダッシュボードが開くこと(開けばGASは健在)
 ```
 
@@ -30,7 +33,7 @@ make dash                        # ダッシュボードが開くこと(開け�
 | 層 | 場所 | 役割 |
 |---|---|---|
 | **GAS** (`gas/src/`) | Google Apps Script | 司令塔。Slack Events受付、スプレッドシート=DB、台本生成、承認・投稿管理、ダッシュボード、自己分析 |
-| **パイプライン** (`pipeline/`) | Python 3.11 | 編集の実働。faster-whisper文字起こし → Claude APIで編集プラン → ffmpegレンダリング → 見た目の自己採点 |
+| **パイプライン** (`pipeline/`) | Python 3.10+（Actionsは3.12） | 編集の実働。faster-whisper文字起こし → Astra/Claude APIでテーマ・編集プラン → ffmpegレンダリング → 見た目の自己採点 |
 | **GitHub Actions** (`.github/workflows/`) | クラウド | パイプラインの実行環境その1。repository_dispatch + 毎時cron |
 | ローカルGPU機 | ユーザーのPC | 実行環境その2。`make pull`で同じ処理を高速に |
 
@@ -91,9 +94,9 @@ make dash                        # ダッシュボードが開くこと(開け�
 
 | 置き場所 | 内容 |
 |---|---|
-| **GASスクリプトプロパティ** | ANTHROPIC_API_KEY, SLACK_BOT_TOKEN, SLACK_CHANNEL_ID, ADMIN_TOKEN, SPREADSHEET_ID, WEBAPP_URL, GITHUB_REPO, GITHUB_TOKEN, YT_CLIENT_ID/SECRET/REFRESH_TOKEN, NOTION_TOKEN ほか(全一覧は`gas/src/Config.js`冒頭コメント) |
+| **GASスクリプトプロパティ** | OPENAI_API_KEY（または従来のANTHROPIC_API_KEY）, SLACK_BOT_TOKEN, SLACK_CHANNEL_ID, ADMIN_TOKEN, SPREADSHEET_ID, WEBAPP_URL, GITHUB_REPO, GITHUB_TOKEN, YT_CLIENT_ID/SECRET/REFRESH_TOKEN, NOTION_TOKEN ほか(全一覧は`gas/src/Config.js`冒頭コメント) |
 | **ローカル `.env`** (git管理外) | 同じ値。ただし命名が違うものがある: GASの`ADMIN_TOKEN` = .envの`GAS_ADMIN_TOKEN`、WebアプリURLは`YTSHORTS_GAS_WEBAPP_URL` |
-| **GitHub Secrets** | ANTHROPIC_API_KEY, GAS_WEBAPP_URL, GAS_ADMIN_TOKEN, SLACK_BOT_TOKEN, YT_CLIENT_ID/SECRET/REFRESH_TOKEN |
+| **GitHub Secrets** | OPENAI_API_KEY（または従来のANTHROPIC_API_KEY）, GAS_WEBAPP_URL, GAS_ADMIN_TOKEN, SLACK_BOT_TOKEN, YT_CLIENT_ID/SECRET/REFRESH_TOKEN |
 
 - `.env`が壊れたら `make env-pull`(GASから収集して検証つきで再生成。GAS側で一時的に`ALLOW_ENV_EXPORT=true`が要る。終わったら消す)
 - トークンを変えたら**3箇所すべて**を同じ値にする。片方だけ変えると`unauthorized`で静かに死ぬ(過去にやった)。
@@ -140,6 +143,7 @@ make gpu-check   # GPUが効いているか確認
 - 未解決のまま渡す問題は「持ち越し」に書く。
 
 ### 持ち越し(2026-09-10時点)
+- **Astraの実機確認が最優先。** ユーザーが `OPENAI_API_KEY` を取得・登録する予定。GASとGitHub Actionsへ各々登録し、ローカルを使う場合は `.env` にも登録する。実API呼出し・課金・本番デプロイ・実動画編集はこの作業では未実施。`ASTRA_SETUP.md` の `ai-check` で利用権限を確認後、実素材1本でテーマ・字幕・カット・見た目と応答時間を検証する。Windows作業環境にはffmpegがPATH上になく、テストはAPI/描画をスタブ化した検証。
 - GitHubのデフォルトブランチは2026-09-10に `gh repo view` で `main` と確認済み。不要ブランチ削除の要否は未確認・未実施。
 - YouTube投稿のend-to-end(承認→スロット→アップロード)は仕組み完成、実投稿での検証回数が少ない
 - Notion同期(`nightlyNotionSync`)はプロパティ設定に依存。トークテーマDB: data_source `40b07b00-9eac-4cfa-bd6f-e67805190198`
@@ -157,10 +161,22 @@ make gpu-check   # GPUが効いているか確認
 - 運用確認: 読み取り時点の直近8件のGitHub Actionsはすべてsuccess。ただし最新HANDOFF追加前の `c009d6c` に対する実行で、実際に動画が投稿されたことやGAS本番コードとの一致を保証しない。
 - 本番操作: push・マージ・GASデプロイ・設定変更・Slack通知・YouTube投稿は行っていない。既存のURLとシークレットは変更していない。
 
+### Astra対応の実装と検証(2026-09-10)
+- API: `gpt-6-astra` / Responses API、テキストと画像入力、既定の推論量はmedium。動画そのものは入力せず、faster-whisper文字起こしと元動画の3フレームを使う。公式仕様へのリンクは `ASTRA_SETUP.md`。
+- 互換性: `auto` でOpenAIキーがあればAstra、なければ既存Claude。明示的に `openai` / `anthropic` に固定可能。呼び出しエラー時に別providerへ切り替えない。キーの実値、GASのURL、実シート、新しいシート定義、本番設定は変更していない。
+- テーマ: `gas/src/AI.js` を共通入口にし、`Themes.js` で稼働中の候補からAstraがテーマと切り口を選定。本人メモ・撮影実績・直近使用日・自己分析を渡す。候補名/カテゴリ/件数を検証し、理由をLogに保存。テーマの週次学習、質問生成、再生分析も共通入口へ接続。
+- 編集: `pipeline/ytshorts/llm.py` と `config.py` でAPI選択。`planner.py` が各ショートのtheme/target_viewer/viewer_promiseを生成し `plan.json` に保存。`cli.py` が元動画を渡し、`illustrations.py` / `review.py` も共通入口を使用。provider/model/reasoningが変わったらキャッシュを作り直し、挿絵はprompt変更も検出する。
+- 登録経路: `.env.example`、`pipeline/config.example.yaml`、`gas/src/Config.js`、`WebApp.js` の許可済み設定配布、`setup/pull-env.py`、`setup/setup.py`、`.github/workflows/process-videos.yml` を更新。新規の本番依存なし。
+- 検証: Python 152件・GAS 23件成功。追加テストは `pipeline/tests/test_llm.py`、`test_env_setup.py`、`gas/tests/ai.test.cjs`。API形式・画像入力・失敗時の挙動・テーマ選択・キャッシュ更新・キー設定配布の認証をスタブで検証。Python compileall、CLI --help、Workflow YAML構文、git diff --checkも成功。CIのGASテスト対象を全test.cjsへ拡張。GitHub上のCIは未実行。
+- 資料: `README.md`、`gas/README.md`、`pipeline/README.md` を現行仕様に更新し、`ASTRA_SETUP.md` に登録・切替・接続確認・実機検証手順を集約。
+- 作業ブランチには前回の一括操作修正 `5197a46` と引き継ぎ `0d3922f` も含む。push/マージ前にこの差分範囲を確認すること。
+
 ### 引き継ぎログ
 - 2026-09-10 Claude: 本引き継ぎ資料を作成。ここまでの実装は`git log`参照。
 - 2026-09-10 Codex: ダッシュボードの一括却下/即時投稿を表示どおりの対象範囲に限定し、別タブの動画の誤操作を防止。回帰テスト14件、テストCI、実行手順を追加。コミット `5197a46`（ローカル、未push）。
 - 2026-09-10 Codex: 引き継ぎの確認結果・検証コマンド・未デプロイ状態・投稿処理の持ち越しを本ファイルに記録。対応コミットは `git log -1 --format=oneline -- HANDOFF.md` で確認可能。
+- 2026-09-10 Codex: ユーザーのAstra移行依頼に対応。OPENAI_API_KEYで撮影テーマ選定・素材の編集プラン・SVG挿絵・見た目評価・自己分析を実行可能にし、旧Claudeとの切替、キャッシュ、登録経路、疎通確認CLI、回帰テストと導入資料を整備。コミット `e37e7a2`（ローカル、未push）。
+- 2026-09-10 Codex: Astra対応の検証結果・実機未確認事項・反映手順を本ファイルに追記。対応コミットは `git log -1 --format=oneline -- HANDOFF.md` で確認可能。
 
 ---
 *質問があればユーザーに聞くより先に、コード・Logシート・このファイルを読むこと。それでも分からないことだけ聞く。健闘を祈る。 — Claude*
