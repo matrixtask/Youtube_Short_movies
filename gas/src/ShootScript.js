@@ -4,6 +4,7 @@
  * 流れ:
  *   1. 朝のトリガーで startDailyShootScript() が実行される
  *   2. テーマ選定 → Astra/Claudeが「カメラに向かって答える用」の質問+ネタ指示を生成
+ *      ScriptQuality.jsで直近質問との重複・構成を検証し、話す順序をhintへ保存
  *   3. Slackに台本が届く → スマホで質問に答える動画を撮る（通しでOK）
  *   4. 撮った動画をそのままスレッドに投稿 → Videos.js が編集キューに登録
  *   5. ローカル常駐の `ytshorts pull --watch` が自動でDL・編集 → 結果がスレッドに返る
@@ -51,8 +52,9 @@ function startShootScript(kind, title) {
     title + '（' + questions.length + '問）',
     'テーマ: ' + themes.map(function (t) { return t.theme + '（' + labelForCategory(t.category) + '）'; }).join(' / '),
     '',
-    '撮り方: スマホを縦にして、1問ずつカメラに向かって答えるだけ。1本の動画で通しでOK。',
-    '言い直し・変な間・噛みは気にしない（編集で全部消えます）。',
+    '撮り方: 横向きで、1問ずつカメラに向かって答えてください。1本の動画で通しでOK。',
+    '各問は「話し出し→話す順」を目安に。分からない数字や未経験の話は無理に埋めず、追問を使ってください。',
+    '言い直しや間は後で編集できます。各回答の前後には短い間を空けてください。',
     '撮り終わったら *このスレッドに動画をそのまま投稿* してください。あとは全部自動です。',
   ].join('\n');
   var parent = sendSlack(intro);
@@ -80,10 +82,7 @@ function startShootScript(kind, title) {
       neta: q.neta || '',
       hint: q.hint || '',
     });
-    var block = ['*Q' + (idx + 1) + '. ' + q.question + '*'];
-    if (q.hint) block.push('　:bulb: ' + q.hint);
-    if (q.neta) block.push('　:performing_arts: ネタ指示: ' + q.neta);
-    lines.push(block.join('\n'));
+    lines.push(formatShootQuestion(q, idx));
   });
 
   sendSlack(lines.join('\n\n'), threadTs);
@@ -91,43 +90,27 @@ function startShootScript(kind, title) {
 }
 
 function generateShootQuestions(themes, count, recentNotes) {
+  if (!Number.isInteger(count) || count < 1 || count > 10 || !themes.length || themes.length > count) {
+    throw new Error('SHOOT_QUESTIONSはテーマ数以上、1〜10の整数にしてください');
+  }
   var concept = getProp('CHANNEL_CONCEPT', '中井佑の、とにかく早く移動したい！');
-  var system = [
-    'あなたはYouTubeチャンネル「' + concept + '」の放送作家です。',
-    'チャンネルの文脈に合う、カメラの前で答えてもらう質問を作ります。',
-    '視聴者が最後まで見てしまう「1問=1ショート」の質問を作ります。',
-    '質問のルール:',
-    '- 1問1トピック、話し言葉で短く（40字以内目安）',
-    '- 「はい/いいえ」で終わらない、具体的なエピソードや本音が出る聞き方',
-    '- 冒頭3秒のフックになる質問（意外性・数字・失敗談・ぶっちゃけ系）',
-    '- 各質問に hint（答え方のコツ、30字以内）を付ける',
-    '- 各質問に neta（答えの途中に挟む小ネタの指示。例: 「ここで一回真顔で沈黙」「あるあるを1個入れる」）を付ける。全問でなくてよい（半分程度）',
-    '- ネタカテゴリの質問はゆるく、笑える話や人間味が出る話を引き出す',
-  ].join('\n');
-  // 撮影実績から学習した「喋りやすさの傾向」を聞き方に反映する
-  // （tuneThemeWeights → analyzeThemeDifferences が毎週更新）
-  var insights = getProp('THEME_INSIGHTS');
-  if (insights) {
-    system += '\n\n話し手の傾向（撮影実績からの学習。最重要）:\n' + insights +
-      '\n喋りにくい傾向に当たる質問は、喋りやすい傾向側の切り口に言い換えて出題する。';
+  var recent = collectRecentQuestions(30);
+  var user = JSON.stringify({ themes: themes, count: count, recent_notes: recentNotes,
+    recent_questions: recent, theme_insights: getProp('THEME_INSIGHTS', ''),
+    script_insights: getProp('SCRIPT_INSIGHTS', '') });
+  var correction = '';
+  // JSON形式と構成の修復は1回だけ。APIエラーは再生成で握り潰さない。
+  for (var attempt = 0; attempt < 2; attempt++) {
+    var text = askAI(shootQuestionSystem(concept), user + correction, Math.max(4000, count * 900));
+    try {
+      var questions = validateShootQuestions(parseJsonLoose(text), themes, count, recent);
+      logEvent('script_quality', 'questions=' + questions.length + ' repair=' + attempt + ' recent=' + recent.length);
+      return questions;
+    } catch (e) {
+      if (attempt === 1) throw new Error('台本の品質検証に失敗: ' + e.message);
+      correction = '\n前回の出力は不採用です。次を修正して全問を出し直すこと: ' + e.message;
+    }
   }
-  // 再生実績からの自己分析（runSelfReview が毎週更新）を質問・ネタづくりに反映する
-  var fixes = getProp('SCRIPT_INSIGHTS');
-  if (fixes) {
-    system += '\n\n自己分析からの修正方針（質問とネタに必ず反映する）:\n' + fixes;
-  }
-  var user = [
-    '今日のテーマ:',
-    themes.map(function (t) { return '- ' + t.theme + '（カテゴリ: ' + t.category + (t.notes ? ' / メモ: ' + t.notes : '') + '）'; }).join('\n'),
-    '',
-    recentNotes.length ? '本人からの最近のメモ（ヒントに使う）:\n' + recentNotes.map(function (n) { return '- ' + n; }).join('\n') : '',
-    '',
-    '合計' + count + '問。各テーマから最低1問。',
-    'JSON配列で出力: [{"theme": "...", "category": "evergreen|news|neta", "question": "...", "hint": "...", "neta": "..."}]',
-  ].join('\n');
-  var questions = askAIJson(system, user, 2500);
-  if (!Array.isArray(questions) || !questions.length) throw new Error('質問生成に失敗しました');
-  return questions.slice(0, count);
 }
 
 /** 直近の台本スレッドに書かれたメモを集める（次回生成のヒント） */

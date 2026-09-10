@@ -20,6 +20,13 @@ class TestPlannerPrompt:
         prompt = build_planner_prompt(self.transcript, Config(), None)
         assert "修正方針" not in prompt
 
+    def test_script_structure_reaches_editor_as_guidance_not_evidence(self):
+        prompt = build_planner_prompt(self.transcript, Config(), [
+            {"idx": 1, "question": "何を比べる？", "hint": "話す順: 判断→具体例→持ち帰り"}])
+        assert "判断→具体例→持ち帰り" in prompt
+        assert "予定であり発話の証拠ではない" in prompt
+        assert "実際に話されなかった答えや数字を字幕で補わない" in prompt
+
 
 def make_short(**over):
     s = {

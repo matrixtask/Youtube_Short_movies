@@ -7,7 +7,7 @@ const { test } = require('node:test');
 function sandbox(properties = {}) {
   const calls = { http: [], legacy: 0, writes: [], logs: [] };
   const context = vm.createContext({});
-  for (const file of ['Config.js', 'Pure.js', 'AI.js', 'Themes.js', 'ShootScript.js', 'WebApp.js']) {
+  for (const file of ['Config.js', 'Pure.js', 'AI.js', 'Themes.js', 'ScriptQuality.js', 'ShootScript.js', 'WebApp.js']) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, '../src', file), 'utf8'), context);
   }
   context.getProp = (name, fallback = '') => properties[name] || fallback;
@@ -127,11 +127,16 @@ test('Astra selects active candidates with history and sends angles to script ge
   assert.match(picked[1].notes, /失敗と対策/);
   assert.equal(calls.logs[0][0], 'theme_ai_selection');
   let scriptPrompt;
-  context.askAIJson = (system, user) => {
+  context.askAI = (system, user) => {
     scriptPrompt = user;
-    return [{ theme: '通勤', question: '何を変えた？' }];
+    return JSON.stringify(picked.map((theme, i) => ({
+      theme: theme.theme, category: theme.category, question: '何を変えた？' + i,
+      format: 'decision', viewer_value: '判断基準が分かる', opening: '選択を一言で',
+      beats: ['選択', '理由', '次に使う場面'], follow_up: '何と比べた？', neta: '',
+      closing: '冒頭の判断基準を一言で回収する', visual: '',
+    })));
   };
-  context.generateShootQuestions(picked, 1, []);
+  context.generateShootQuestions(picked, 2, []);
   assert.match(scriptPrompt, /朝の時短を体験から聞く/);
 });
 
